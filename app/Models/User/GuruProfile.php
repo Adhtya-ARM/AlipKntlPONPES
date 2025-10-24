@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Models\User;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Akademik\Mapel;
+use App\Models\Akademik\Penilaian;
+
+class GuruProfile extends Model
+{
+    use HasFactory;
+
+    protected $table = "guru_profile";
+    protected $fillable = ["guru_id", "nama", "jabatan", "alamat", "no_hp"];
+
+    // 4. Define Inverse Relationship
+    public function guru()
+    {
+        return $this->belongsTo(Guru::class);
+    }
+
+    public function mapels()
+    {
+        return $this->belongsToMany(
+            Mapel::class,
+            "guru_mapel",
+            "guru_profile_id",
+            "mapel_id",
+        );
+    }
+
+    /**
+     * Relasi One-to-Many: Guru Profile mengisi banyak Penilaian.
+     */
+    public function penilaians()
+    {
+        return $this->hasMany(Penilaian::class, "guru_profile_id");
+    }
+}
