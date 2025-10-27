@@ -5,7 +5,9 @@ namespace App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use illuminate\Database\Eloquent\Relations\BelongsTo;
+use illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Akademik\Mapel;
+use App\Models\Akademik\GuruMapel;
 use App\Models\Akademik\Penilaian;
 
 class GuruProfile extends Model
@@ -30,6 +32,11 @@ class GuruProfile extends Model
             "mapel_id",
         );
     }
+    
+    public function guruMapels()
+        {
+            return $this->hasMany(GuruMapel::class, 'guru_profile_id');
+        }
 
     /**
      * Relasi One-to-Many: Guru Profile mengisi banyak Penilaian.

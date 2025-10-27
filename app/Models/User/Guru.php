@@ -24,12 +24,11 @@ class Guru extends Authenticatable
         return $this->where("username", $username)->first();
     }
 
-    /**
-     * Tentukan field username untuk autentikasi.
-     */
-    public function getAuthUsername()
+    public function getDisplayNameAttribute()
     {
-        return "username";
+        if ($this->relationLoaded('profile') && $this->profile) {
+            return $this->profile->nama ?? $this->username;
+        }
     }
 
     protected function casts(): array
@@ -39,8 +38,9 @@ class Guru extends Authenticatable
         ];
     }
 
-    public function GuruProfile()
+    public function Profile()
     {
-        return $this->hasOne(GuruProfile::class);
+        return $this->hasOne(GuruProfile::class, 'guru_id');
     }
+
 }

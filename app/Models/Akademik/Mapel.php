@@ -5,6 +5,7 @@ namespace App\Models\Akademik;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\User\GuruProfile;
+use App\Models\Akademik\GuruMapel;
 use App\Models\Akademik\Penilaian;
 
 class Mapel extends Model
@@ -13,7 +14,7 @@ class Mapel extends Model
 
     protected $table = "mapel"; // Pastikan nama tabel benar, jika Anda menggunakan snake_case 'mata_pelajaran' ganti di sini
 
-    protected $fillable = ["nama_mapel"];
+    protected $fillable = ["nama_mapel", "semester", "tahun_ajaran", "kelas"];
 
     /**
      * Relasi One-to-Many: Satu Mata Pelajaran memiliki banyak Penilaian.
@@ -35,4 +36,9 @@ class Mapel extends Model
             "guru_profile_id",
         );
     }
+    
+    public function guruMapels()
+        {
+            return $this->hasMany(GuruMapel::class, 'mapel_id');
+        }
 }

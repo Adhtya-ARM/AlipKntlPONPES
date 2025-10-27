@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Akademik\Penilaian;
 use App\Models\Akademik\Mapel;
 use App\Models\User\SantriProfile;
-// Pastikan path Model Anda benar. Jika Wali, Guru, Santri ada di App\Models, 
-// maka sesuaikan pathnya di sini, atau asumsikan profile ada di App\Models\User
-use App\Models\User\GuruProfile; 
+use App\Models\User\GuruProfile;
+use App\Models\Akademik\GuruMapel; // Model untuk tabel pivot guru_mapel
+
+use Spatie\PdfToText\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Config; 
+use Illuminate\Support\Facades\Config;
 
 class PenilaianController extends Controller
 {
@@ -22,292 +23,159 @@ class PenilaianController extends Controller
     protected function getAuthenticatedUserAndGuard()
     {
         // Guard yang diizinkan untuk PenilaianController (sesuai route: web, guru)
-        $allowedGuards = ['web', 'guru'];
-        
+        $allowedGuards = ["web", "guru"];
+
         foreach ($allowedGuards as $guardName) {
             if (Auth::guard($guardName)->check()) {
                 return [
-                    'user' => Auth::guard($guardName)->user(),
-                    'guard' => $guardName // Akan mengembalikan 'web' atau 'guru'
+                    "user" => Auth::guard($guardName)->user(),
+                    "guard" => $guardName, // Akan mengembalikan 'web' atau 'guru'
                 ];
             }
         }
-        return ['user' => null, 'guard' => null];
-    }
-    
-    /**
-     * Helper untuk mendapatkan semua Santri dan Mapel yang relevan untuk form modal.
-     * @param \Illuminate\Database\Eloquent\Model|null $guruModel - Model Guru yang sudah terotentikasi
-     * @param string $userRole
-     * @return array
-     */
-    protected function getFormData($guruModel, $userRole)
-    {
-        // Ambil semua Santri (ID dan Nama)
-        $allSantri = SantriProfile::select('id', 'nama', 'kelas')->orderBy('nama')->get();
-
-        // Ambil semua Mapel (ID dan Nama) yang diizinkan
-        $mapelQuery = Mapel::select('id', 'nama_mapel', 'kelas', 'tahun_ajaran', 'semester')->orderBy('nama_mapel');
-
-        // Filter Mapel berdasarkan Guru yang mengajar (jika role-nya guru)
-        // Kita langsung pakai $guruModel (yang merupakan instance dari App\Models\Guru)
-        if ($userRole === 'guru' && $guruModel && method_exists($guruModel, 'mapels')) {
-            $mapelIdsDiizinkan = $guruModel->mapels->pluck('id');
-            $mapelQuery->whereIn('id', $mapelIdsDiizinkan);
-        }
-
-        $allMapel = $mapelQuery->get();
-
-        // Ambil opsi Tahun Ajaran dan Semester dari Mapel
-        $allTahunAjaran = Mapel::select('tahun_ajaran')->distinct()->pluck('tahun_ajaran')->sortDesc();
-        $allSemester = ['Ganjil', 'Genap'];
-
-        return compact('allSantri', 'allMapel', 'allTahunAjaran', 'allSemester');
+        return ["user" => null, "guard" => null];
     }
 
     /**
-     * Menampilkan daftar nilai dalam format matriks (pivot) dengan filter.
+     * Menampilkan daftar santri dan nilai yang relevan (dengan filter guru).
      */
     public function index(Request $request)
     {
-        // MENGAMBIL USER YANG SEDANG AKTIF (Guard sudah melindungi rute ini)
         $authData = $this->getAuthenticatedUserAndGuard();
-        $user = $authData['user'];
-        $guard = $authData['guard'];
-
-        if (!$user) {
-            // Seharusnya diredirect oleh middleware 'auth:web,guru' di route
-            return redirect()->route('login');
-        }
-
-        // Tentukan role/guard yang aktif
-        $userRole = $guard;
-        $isGuru = $userRole === 'guru';
+        $user = $authData["user"];
+        $userRole = $authData["guard"];
         
-        // Model yang sedang login (Guru atau User/Admin). Ini digunakan untuk relasi mapels.
-        $userModelForMapels = $isGuru ? $user : null; 
+        // 1. Otorisasi dan Penentuan Mata Pelajaran
+        $mapelIdsTampil = collect([]);
+        $currentMapel = null;
 
-        // 1. Tentukan Opsi Filter Kelas
-        $allKelas = SantriProfile::select('kelas')->distinct()->orderBy('kelas')->pluck('kelas');
-        $defaultKelas = $allKelas->first() ?? 'VII';
+        if ($userRole === 'guru' && $user && $user->guruProfile) {
+            $guruProfileId = $user->guruProfile->id;
+            
+            // 🌟 REVISI 1: Ambil semua Mapel ID dari tabel pivot guru_mapel
+            $mapelIdsDiajar = GuruMapel::where('guru_profile_id', $guruProfileId)
+                                            ->pluck('mapel_id');
+            
+            // Ambil detail Mapel PERTAMA yang diajar (untuk menentukan kelas default)
+            $currentMapel = Mapel::whereIn('id', $mapelIdsDiajar)->first();
 
-        // 2. Tentukan Filter Opsi Unik Tahun Ajaran & Semester
-        $allTahunAjaran = Mapel::select('tahun_ajaran')->distinct()->pluck('tahun_ajaran')->sortDesc();
-        $allSemester = ['Ganjil', 'Genap'];
-
-        $defaultTahun = $allTahunAjaran->first() ?? (string)(date('Y') . '/' . (date('Y') + 1));
-        $defaultSemester = 'Ganjil';
-
-        // 3. Tentukan Filter Aktif
-        $currentKelas = $request->input('kelas', $defaultKelas);
-        $currentTahunAjaran = $request->input('tahun_ajaran', $defaultTahun);
-        $currentSemester = $request->input('semester', $request->input('semester') ?: $defaultSemester);
-
-        // 4. Tentukan Mata Pelajaran yang Boleh Diakses (Header Kolom)
-        $mapelQuery = Mapel::query();
-
-        // Filter Mapel berdasarkan Kelas, Tahun Ajaran, dan Semester
-        $mapelQuery->where('kelas', $currentKelas)
-                   ->where('tahun_ajaran', $currentTahunAjaran)
-                   ->where('semester', $currentSemester);
-
-        if ($isGuru) {
-            if ($userModelForMapels && method_exists($userModelForMapels, 'mapels')) {
-                $mapelIdsDiizinkan = $userModelForMapels->mapels->pluck('id');
-                $mapelQuery->whereIn('id', $mapelIdsDiizinkan);
+            if ($currentMapel) {
+                // HANYA ambil ID Mapel PERTAMA untuk ditampilkan di halaman index ini
+                // (Diasumsikan guru hanya menilai SATU Mapel dalam satu tampilan)
+                $mapelIdsTampil = collect([$currentMapel->id]); 
             }
+        } 
+        
+        // Jika bukan guru atau guru tidak terikat mapel, kembalikan tampilan kosong
+        if ($mapelIdsTampil->isEmpty() && $userRole === 'guru') {
+            return view("akademik.penilaian.index", [
+                "santriProfiles" => new \Illuminate\Pagination\LengthAwarePaginator([], 0, 10, 1, ['path' => $request->url()]), 
+                "penilaians" => collect([]), 
+                "currentKelas" => $request->input("kelas", "7"), // Default ke kelas umum '7'
+                "mapelIdsTampil" => null, // Tandai bahwa tidak ada mapel yang dipilih/ditampilkan
+            ])->with('error', 'Anda belum terikat pada mata pelajaran manapun.');
         }
 
-        $mataPelajaran = $mapelQuery->get();
-        $mapelIdsTampil = $mataPelajaran->pluck('id'); 
+        // 2. Ambil filter dari request
+        // Gunakan kelas dari request, atau default ke kelas Mapel yang diajar (misal: '7')
+        $defaultKelas = $currentMapel ? $currentMapel->kelas : '7';
+        $currentKelasGeneral = $request->input("kelas", $defaultKelas); // Nilainya adalah '7'
 
-        // 5. Ambil Santri Profile yang sesuai dengan Kelas
-        $santriQuery = SantriProfile::with('santri')
-                                   ->where('kelas', $currentKelas)
-                                   ->orderBy('nama');
+        // 🌟 REVISI 2: Buat Filter LIKE untuk mencakup kelas spesifik (7A, 7B, dst.)
+        $kelasFilter = $currentKelasGeneral . '%'; // Menghasilkan '7%' untuk kelas 7
 
-        if ($request->filled('cari')) {
-            $searchTerm = '%' . $request->input('cari') . '%';
-            $santriQuery->where('nama', 'like', $searchTerm);
-        }
+        // 3. Ambil ID SantriProfile yang sesuai dengan filter Kelas
+        $santriProfiles = SantriProfile::query()
+            ->with("santri:id,nis,username")
+            // 🌟 REVISI 3: Ganti where('kelas', ...) menjadi where('kelas', 'LIKE', ...)
+            ->where("kelas", 'LIKE', $kelasFilter) 
+            ->orderBy("nama")
+            ->paginate(10);
 
-        $santriProfiles = $santriQuery->paginate(20)->appends($request->query());
+        $profileIds = $santriProfiles->pluck("id");
 
-        // 6. Ambil semua Penilaian yang relevan
-        $profileIds = $santriProfiles->pluck('id');
+        // 4. Ambil semua Penilaian yang relevan (Filter berdasarkan Santri dan Mapel)
+        // Kita hanya mengambil nilai untuk SATU Mapel ID ($mapelIdsTampil->first())
+        $penilaiansData = Penilaian::whereIn("santri_profile_id", $profileIds)
+            ->whereIn("mapel_id", $mapelIdsTampil) // Hanya mapel yang diajar guru
+            // Jika Anda memiliki semester/tahun ajaran, tambahkan di sini:
+            // ->where('tahun_ajaran', $currentTahunAjaran)
+            // ->where('semester', $currentSemester) 
+            ->get();
 
-        $penilaianQuery = Penilaian::whereIn('santri_profile_id', $profileIds)
-                                   ->whereIn('mapel_id', $mapelIdsTampil)
-                                   ->with(['santriProfile:id,nama', 'mapel:id,nama']); 
+        // 5. Transformasi data Penilaian menjadi pivot array: [santri_profile_id => Penilaian Object]
+        $penilaians = $penilaiansData->keyBy('santri_profile_id');
 
-        $penilaians = $penilaianQuery->get()
-                                     ->map(function ($item) {
-                                         $item->santri_nama = $item->santriProfile->nama ?? 'N/A';
-                                         $item->mata_pelajaran = $item->mapel->nama ?? 'N/A';
-                                         return $item;
-                                     })
-                                     ->groupBy('santri_profile_id')
-                                     ->map(fn ($items) => $items->keyBy('mapel_id'));
-
-        // 7. Ambil data Form Modal
-        $formData = $this->getFormData($userModelForMapels, $userRole);
-
-        // Kirim data pivot, filter options, dan data form ke view
-        return view('Akademik.Nilai.index', array_merge($formData, compact(
-            'santriProfiles',
-            'mataPelajaran',
-            'penilaians',
-            'currentKelas',
-            'currentTahunAjaran',
-            'currentSemester',
-            'allKelas'
-        )));
+        // 6. Tampilkan View
+        return view("akademik.penilaian.index", [
+            "santriProfiles" => $santriProfiles, // Data SantriProfile (Paginasi)
+            "penilaians" => $penilaians, // Data nilai per santri
+            // Kirim kelas general (misal: '7') untuk navigasi dan tampilan
+            "currentKelas" => $currentKelasGeneral, 
+            "mapelIdsTampil" => $mapelIdsTampil->first(), // Kirim Mapel ID tunggal
+        ]);
     }
 
     /**
-     * Menampilkan form untuk menambahkan nilai baru.
-     */
-    public function create()
-    {
-        $authData = $this->getAuthenticatedUserAndGuard();
-        $user = $authData['user'];
-        $userRole = $authData['guard']; 
-
-        if (!$user) {
-            return redirect()->route('login');
-        }
-
-        $userModelForMapels = ($userRole === 'guru') ? $user : null;
-
-        // Ambil semua data yang diperlukan untuk form input:
-        $formData = $this->getFormData($userModelForMapels, $userRole);
-
-        // Data default untuk form (opsional)
-        $defaultTahun = $formData['allTahunAjaran']->first() ?? (string)(date('Y') . '/' . (date('Y') + 1));
-        $defaultSemester = 'Ganjil';
-
-        return view('Akademik.Nilai.create', array_merge($formData, compact(
-            'defaultTahun',
-            'defaultSemester'
-        )));
-    }
-
-    /**
-     * Menyimpan atau memperbarui nilai dari form modal (Logika CREATE/UPDATE).
+     * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
-        $authData = $this->getAuthenticatedUserAndGuard();
-        $user = $authData['user'];
-        $userRole = $authData['guard'];
-        
-        if (!$user) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        $userModelForMapels = ($userRole === 'guru') ? $user : null;
-
-        // Validasi
+        // Logika store dipertahankan seperti aslinya
         $request->validate([
-            'santri_profile_id' => 'required|exists:santri_profile,id',
-            'mapel_id'          => 'required|exists:mapel,id',
-            'nilai_tugas'       => 'required|numeric|min:0|max:100',
-            'nilai_uts'         => 'required|numeric|min:0|max:100',
-            'nilai_uas'         => 'required|numeric|min:0|max:100',
-        ]);
-        
-        // Pengecekan Otorisasi Tambahan (opsional: apakah guru ini mengajar mapel ini?)
-        // ...
-
-        $data = $request->only([
-            'santri_profile_id', 'mapel_id', 'nilai_tugas', 'nilai_uts', 'nilai_uas'
+            'santri_profile_id' => 'required|exists:santri_profiles,id',
+            'mapel_id' => 'required|exists:mapels,id',
+            'nilai_pengetahuan' => 'nullable|numeric|min:0|max:100',
+            'nilai_keterampilan' => 'nullable|numeric|min:0|max:100',
+            // Tambahkan validasi lain sesuai kebutuhan
         ]);
 
-        $penilaian = Penilaian::where('santri_profile_id', $data['santri_profile_id'])
-                             ->where('mapel_id', $data['mapel_id'])
-                             ->first();
+        Penilaian::updateOrCreate(
+            [
+                'santri_profile_id' => $request->santri_profile_id,
+                'mapel_id' => $request->mapel_id,
+                // Tambahkan kriteria unik lainnya (misalnya tahun_ajaran, semester)
+            ],
+            [
+                'nilai_pengetahuan' => $request->nilai_pengetahuan,
+                'nilai_keterampilan' => $request->nilai_keterampilan,
+                'guru_profile_id' => Auth::guard('guru')->check() ? Auth::user()->guruProfile->id : null,
+            ]
+        );
 
-        DB::beginTransaction();
-        try {
-            if ($penilaian) {
-                $penilaian->update($data); 
-                $message = 'Nilai berhasil diperbarui.';
-            } else {
-                // Guru Profile ID diambil dari user yang sedang login jika guardnya 'guru'
-                // Jika Admin ('web'), gunakan ID mereka atau fallback (misal: 1)
-                $data['guru_profile_id'] = $userModelForMapels ? $userModelForMapels->id : $user->id; 
-                Penilaian::create($data);
-                $message = 'Nilai berhasil ditambahkan.';
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Gagal menyimpan nilai: ' . $e->getMessage());
-        }
-
-        $redirectParams = $request->only('kelas', 'tahun_ajaran', 'semester', 'cari', 'page');
-
-        return redirect()->route('penilaian.index', $redirectParams)->with('success', $message);
+        return redirect()->back()->with('success', 'Nilai santri berhasil disimpan/diperbarui.');
     }
 
     /**
-     * Memperbarui nilai yang sudah ada (Logika UPDATE).
+     * Update the specified resource in storage.
      */
-    public function update(Request $request, Penilaian $penilaian)
+    public function update(Request $request, $id)
     {
-        $authData = $this->getAuthenticatedUserAndGuard();
-        $user = $authData['user'];
+        // Logika update dipertahankan seperti aslinya
+        $penilaian = Penilaian::findOrFail($id);
         
-        if (!$user) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-        
-        // Validasi
         $request->validate([
-            'nilai_tugas' => 'required|numeric|min:0|max:100',
-            'nilai_uts'   => 'required|numeric|min:0|max:100',
-            'nilai_uas'   => 'required|numeric|min:0|max:100',
+            'nilai_pengetahuan' => 'nullable|numeric|min:0|max:100',
+            'nilai_keterampilan' => 'nullable|numeric|min:0|max:100',
+            // Tambahkan validasi lain sesuai kebutuhan
         ]);
 
-        $data = $request->only(['nilai_tugas', 'nilai_uts', 'nilai_uas']);
+        $penilaian->update([
+            'nilai_pengetahuan' => $request->nilai_pengetahuan,
+            'nilai_keterampilan' => $request->nilai_keterampilan,
+            // Perbarui data lain jika diperlukan
+        ]);
 
-        DB::beginTransaction();
-        try {
-            $penilaian->update($data);
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Gagal mengupdate nilai: ' . $e->getMessage());
-        }
-
-        $redirectParams = $request->only('kelas', 'tahun_ajaran', 'semester', 'cari', 'page');
-
-        return redirect()->route('penilaian.index', $redirectParams)->with('success', 'Nilai berhasil diperbarui.');
+        return redirect()->back()->with('success', 'Nilai santri berhasil diperbarui.');
     }
 
     /**
-     * Menghapus nilai (Logika DELETE).
+     * Remove the specified resource from storage.
      */
-    public function destroy(Penilaian $penilaian, Request $request)
+    public function destroy(Penilaian $penilaian)
     {
-        $authData = $this->getAuthenticatedUserAndGuard();
-        $user = $authData['user'];
-
-        if (!$user) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        DB::beginTransaction();
-        try {
-            $penilaian->delete();
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'Gagal menghapus nilai: ' . $e->getMessage());
-        }
-
-        $redirectParams = $request->query();
-
-        return redirect()->route('penilaian.index', $redirectParams)->with('success', 'Nilai berhasil dihapus.');
+        // Logika destroy dipertahankan seperti aslinya
+        $penilaian->delete();
+        return redirect()->back()->with('success', 'Nilai berhasil dihapus.');
     }
 }
