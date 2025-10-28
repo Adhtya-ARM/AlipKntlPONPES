@@ -121,25 +121,30 @@ class PenilaianController extends Controller
      */
     public function store(Request $request)
     {
-        // Logika store dipertahankan seperti aslinya
         $request->validate([
             'santri_profile_id' => 'required|exists:santri_profiles,id',
             'mapel_id' => 'required|exists:mapels,id',
-            'nilai_pengetahuan' => 'nullable|numeric|min:0|max:100',
-            'nilai_keterampilan' => 'nullable|numeric|min:0|max:100',
-            // Tambahkan validasi lain sesuai kebutuhan
+            'nilai_harian' => 'nullable|numeric|min:0|max:100',
+            'nilai_uts' => 'nullable|numeric|min:0|max:100',
+            'nilai_uas' => 'nullable|numeric|min:0|max:100',
+            'catatan' => 'nullable|string|max:255',
         ]);
+
+        $authData = $this->getAuthenticatedUserAndGuard();
+        $guruProfileId = $authData['guard'] === 'guru' ? $authData['user']->guruProfile->id : null;
 
         Penilaian::updateOrCreate(
             [
                 'santri_profile_id' => $request->santri_profile_id,
                 'mapel_id' => $request->mapel_id,
-                // Tambahkan kriteria unik lainnya (misalnya tahun_ajaran, semester)
             ],
             [
-                'nilai_pengetahuan' => $request->nilai_pengetahuan,
-                'nilai_keterampilan' => $request->nilai_keterampilan,
-                'guru_profile_id' => Auth::guard('guru')->check() ? Auth::user()->guruProfile->id : null,
+                'nilai' => $request->nilai_harian,
+                'uts' => $request->nilai_uts,
+                'uas' => $request->nilai_uas,
+                'catatan' => $request->catatan,
+                'guru_profile_id' => $guruProfileId,
+                'kelas' => $request->kelas,
             ]
         );
 
@@ -151,19 +156,20 @@ class PenilaianController extends Controller
      */
     public function update(Request $request, $id)
     {
-        // Logika update dipertahankan seperti aslinya
         $penilaian = Penilaian::findOrFail($id);
-        
+
         $request->validate([
-            'nilai_pengetahuan' => 'nullable|numeric|min:0|max:100',
-            'nilai_keterampilan' => 'nullable|numeric|min:0|max:100',
-            // Tambahkan validasi lain sesuai kebutuhan
+            'nilai_harian' => 'nullable|numeric|min:0|max:100',
+            'nilai_uts' => 'nullable|numeric|min:0|max:100',
+            'nilai_uas' => 'nullable|numeric|min:0|max:100',
+            'catatan' => 'nullable|string|max:255',
         ]);
 
         $penilaian->update([
-            'nilai_pengetahuan' => $request->nilai_pengetahuan,
-            'nilai_keterampilan' => $request->nilai_keterampilan,
-            // Perbarui data lain jika diperlukan
+            'nilai' => $request->nilai_harian,
+            'uts' => $request->nilai_uts,
+            'uas' => $request->nilai_uas,
+            'catatan' => $request->catatan,
         ]);
 
         return redirect()->back()->with('success', 'Nilai santri berhasil diperbarui.');

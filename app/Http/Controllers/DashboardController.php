@@ -33,8 +33,23 @@ class DashboardController extends Controller
         // Tentukan data dan view berdasarkan role (guard)
         switch ($guard) {
             case 'guru':
-            
-                return view('dashboard.guru');
+                // Ambil data untuk dashboard guru
+                $guruProfile = $user->Profile; // Use the correct relationship method
+                if (!$guruProfile) {
+                    // Handle case where guruProfile is null
+                    return redirect()->route('login')->with('error', 'Profile guru tidak ditemukan.');
+                }
+                $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
+                $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+
+                // Hitung total santri yang diajar (unik berdasarkan kelas mapel)
+                $kelasMapels = $mapels->pluck('kelas')->unique();
+                $totalSantri = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->count();
+
+                // Total penilaian yang sudah diinput oleh guru ini
+                $totalPenilaian = \App\Models\Akademik\Penilaian::where('guru_profile_id', $guruProfile->id)->count();
+
+                return view('dashboard.guru', compact('mapels', 'totalSantri', 'totalPenilaian'));
 
             case 'santri':
              
