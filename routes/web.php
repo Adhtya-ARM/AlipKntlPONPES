@@ -40,20 +40,20 @@ foreach ($webGuards as $guard) {
             ->name("{$guard}.logout")
             ->defaults("guard", $guard);
     });
-
-    // 1. Gunakan Route::resource untuk Penilaian
-    // Hanya sertakan index, store, update, destroy
-    Route::resource('penilaian', PenilaianController::class)->only([
-        'index', // GET /penilaian (Tabel utama)
-        'store', // POST /penilaian (Menyimpan data baru dari modal CREATE)
-        'update', // PUT/PATCH /penilaian/{penilaian} (Memperbarui data dari modal EDIT)
-        'destroy', // DELETE /penilaian/{penilaian} (Menghapus data)
-    ]);
-    
-    // 2. Tambahkan custom route untuk Upload PDF
-    Route::post('penilaian/upload-pdf', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload.pdf');
-
-    Route::resource("santri", SantriController::class);
-    Route::resource("wali", WaliController::class);
-    Route::resource("user", UserController::class);
 }
+
+// Define resource routes outside the foreach to avoid multiple definitions
+// These routes will be accessible without specific guard middleware, but the controller handles authentication
+Route::resource('penilaian', PenilaianController::class)->only([
+    'index', // GET /penilaian (Tabel utama)
+    'store', // POST /penilaian (Menyimpan data baru dari modal CREATE)
+    'update', // PUT/PATCH /penilaian/{penilaian} (Memperbarui data dari modal EDIT)
+    'destroy', // DELETE /penilaian/{penilaian} (Menghapus data)
+]);
+
+// Custom route untuk Upload PDF
+Route::post('penilaian/upload-pdf', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload.pdf');
+
+Route::resource("santri", SantriController::class);
+Route::resource("wali", WaliController::class);
+Route::resource("user", UserController::class);

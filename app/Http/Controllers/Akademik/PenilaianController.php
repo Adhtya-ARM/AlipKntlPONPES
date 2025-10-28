@@ -111,8 +111,9 @@ class PenilaianController extends Controller
             "santriProfiles" => $santriProfiles, // Data SantriProfile (Paginasi)
             "penilaians" => $penilaians, // Data nilai per santri
             // Kirim kelas general (misal: '7') untuk navigasi dan tampilan
-            "currentKelas" => $currentKelasGeneral, 
+            "currentKelas" => $currentKelasGeneral,
             "mapelIdsTampil" => $mapelIdsTampil->first(), // Kirim Mapel ID tunggal
+            "mapelSaatIni" => $currentMapel, // Kirim objek Mapel untuk tampilan
         ]);
     }
 
@@ -127,6 +128,11 @@ class PenilaianController extends Controller
             'nilai_harian' => 'nullable|numeric|min:0|max:100',
             'nilai_uts' => 'nullable|numeric|min:0|max:100',
             'nilai_uas' => 'nullable|numeric|min:0|max:100',
+            'bab1' => 'nullable|numeric|min:0|max:100',
+            'bab2' => 'nullable|numeric|min:0|max:100',
+            'bab3' => 'nullable|numeric|min:0|max:100',
+            'bab4' => 'nullable|numeric|min:0|max:100',
+            'bab5' => 'nullable|numeric|min:0|max:100',
             'catatan' => 'nullable|string|max:255',
         ]);
 
@@ -142,6 +148,11 @@ class PenilaianController extends Controller
                 'nilai' => $request->nilai_harian,
                 'uts' => $request->nilai_uts,
                 'uas' => $request->nilai_uas,
+                'bab1' => $request->bab1,
+                'bab2' => $request->bab2,
+                'bab3' => $request->bab3,
+                'bab4' => $request->bab4,
+                'bab5' => $request->bab5,
                 'catatan' => $request->catatan,
                 'guru_profile_id' => $guruProfileId,
                 'kelas' => $request->kelas,
@@ -162,6 +173,11 @@ class PenilaianController extends Controller
             'nilai_harian' => 'nullable|numeric|min:0|max:100',
             'nilai_uts' => 'nullable|numeric|min:0|max:100',
             'nilai_uas' => 'nullable|numeric|min:0|max:100',
+            'bab1' => 'nullable|numeric|min:0|max:100',
+            'bab2' => 'nullable|numeric|min:0|max:100',
+            'bab3' => 'nullable|numeric|min:0|max:100',
+            'bab4' => 'nullable|numeric|min:0|max:100',
+            'bab5' => 'nullable|numeric|min:0|max:100',
             'catatan' => 'nullable|string|max:255',
         ]);
 
@@ -169,6 +185,11 @@ class PenilaianController extends Controller
             'nilai' => $request->nilai_harian,
             'uts' => $request->nilai_uts,
             'uas' => $request->nilai_uas,
+            'bab1' => $request->bab1,
+            'bab2' => $request->bab2,
+            'bab3' => $request->bab3,
+            'bab4' => $request->bab4,
+            'bab5' => $request->bab5,
             'catatan' => $request->catatan,
         ]);
 
@@ -183,5 +204,69 @@ class PenilaianController extends Controller
         // Logika destroy dipertahankan seperti aslinya
         $penilaian->delete();
         return redirect()->back()->with('success', 'Nilai berhasil dihapus.');
+    }
+
+    /**
+     * Upload and process PDF for nilai import.
+     */
+    public function uploadAndProcessPdf(Request $request)
+    {
+        $request->validate([
+            'pdf_file' => 'required|file|mimes:pdf|max:10240', // Max 10MB
+            'mapel_id_upload' => 'required|exists:mapels,id',
+            'kelas_upload' => 'required|string',
+        ]);
+
+        $authData = $this->getAuthenticatedUserAndGuard();
+        $guruProfileId = $authData['guard'] === 'guru' ? $authData['user']->guruProfile->id : null;
+
+        // Store the uploaded PDF
+        $pdfPath = $request->file('pdf_file')->store('uploads/pdf_nilai', 'public');
+
+        // Extract text from PDF using Spatie\PdfToText
+        try {
+            $pdfText = Pdf::getText(storage_path('app/public/' . $pdfPath));
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Gagal membaca PDF: ' . $e->getMessage());
+        }
+
+        // Simple parsing logic (assuming format: NIS: nilai_harian, uts, uas)
+        // This is a basic example; adjust based on actual PDF format
+        $lines = explode("\n", $pdfText);
+        $processedCount = 0;
+
+        foreach ($lines as $line) {
+            // Example line: "12345: 85, 78, 92"
+            if (preg_match('/(\d+):\s*(\d+),\s*(\d+),\s*(\d+)/', $line, $matches)) {
+                $nis = $matches[1];
+                $nilai_harian = $matches[2];
+                $uts = $matches[3];
+                $uas = $matches[4];
+
+                // Find santri by NIS
+                $santriProfile = SantriProfile::whereHas('santri', function($q) use ($nis) {
+                    $q->where('nis', $nis);
+                })->first();
+
+                if ($santriProfile) {
+                    Penilaian::updateOrCreate(
+                        [
+                            'santri_profile_id' => $santriProfile->id,
+                            'mapel_id' => $request->mapel_id_upload,
+                        ],
+                        [
+                            'nilai' => $nilai_harian,
+                            'uts' => $uts,
+                            'uas' => $uas,
+                            'guru_profile_id' => $guruProfileId,
+                            'kelas' => $request->kelas_upload,
+                        ]
+                    );
+                    $processedCount++;
+                }
+            }
+        }
+
+        return redirect()->back()->with('success', "Berhasil memproses {$processedCount} nilai dari PDF.");
     }
 }

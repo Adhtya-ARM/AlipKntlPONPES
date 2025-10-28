@@ -41,10 +41,10 @@ class AuthController extends Controller
             // Coba login menggunakan guard saat ini
             if (Auth::guard($guard)->attempt($credentials, $remember)) {
                 $request->session()->regenerate();
-                
+
                 // Jika berhasil, redirect ke dashboard guard tersebut
                 // Contoh: Jika login berhasil di guard 'guru', redirect ke /guru/dashboard
-                return redirect()->intended("/{$guard}/dashboard");
+                return redirect("/{$guard}/dashboard");
             }
         }
         

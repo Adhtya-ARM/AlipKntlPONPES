@@ -23,6 +23,12 @@ class Penilaian extends Model
         'nilai',
         'uas',
         'uts',
+        'bab1',
+        'bab2',
+        'bab3',
+        'bab4',
+        'bab5',
+        'catatan',
     ];
 
     // ... (Relasi santriProfile dan mataPelajaran tetap sama)

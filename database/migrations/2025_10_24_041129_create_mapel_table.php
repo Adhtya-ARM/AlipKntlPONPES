@@ -15,7 +15,7 @@ return new class extends Migration {
             $table->string("nama_mapel");
             $table->integer("kelas");
             $table->integer("tahun_ajaran");
-            $table->enum("semeter", ["ganjil", "genap"])->default("ganjil");
+            $table->enum("semester", ["ganjil", "genap"])->default("ganjil");
             $table->timestamps();
         });
     }
