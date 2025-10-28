@@ -8,84 +8,53 @@ use App\Http\Controllers\User\WaliController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Akademik\PenilaianController;
 use App\Http\Controllers\Akademik\MapelController;
-use Illuminate\Support\Facades\Config;
-// Ambil semua guard berbasis sesi dari config/auth.php
+use App\Http\Controllers\Akademik\AbsensiController;
 
-// Ambil semua guard berbasis sesi
-$allGuards = Config::get("auth.guards");
-$webGuards = array_keys(
-    array_filter($allGuards, fn($g) => $g["driver"] === "session"),
-);
-$guardRegex = implode("|", $webGuards);
-
-// Login URL tunggal: /login
+// Login routes (no auth required)
 Route::get("/login", [AuthController::class, "showLoginForm"])->name("login");
 Route::post("/login", [AuthController::class, "login"])->name("login.process");
-Route::post("/logout/{guard}", [
-    App\Http\Controllers\Auth\AuthController::class,
-    "logout",
-])->name("logout");
+Route::post("/logout/{guard}", [AuthController::class, "logout"])->name("logout");
 
-// Route Dashboard (Tetap butuh middleware auth:guard)
-foreach ($webGuards as $guard) {
-    Route::middleware("auth:{$guard}")->group(function () use ($guard) {
-        // 1. Rute Dashboard: /guru/dashboard, /santri/dashboard, dst.
-        // Memanggil DashboardController::index dan meneruskan nama guard.
-        Route::get("/{$guard}/dashboard", [DashboardController::class, "index"])
-            ->name("{$guard}.dashboard")
-            ->defaults("guard", $guard);
+// Dashboard routes - separate per guard
+Route::middleware("auth:web")->prefix("admin")->group(function () {
+    Route::get("/dashboard", [DashboardController::class, "index"])->name("admin.dashboard")->defaults("guard", "web");
+});
 
-        // 2. Rute Logout: Setiap role memanggil AuthController::logout
-        // Menggunakan POST karena ini adalah aksi yang mengubah state.
-        Route::post("/{$guard}/logout", [AuthController::class, "logout"])
-            ->name("{$guard}.logout")
-            ->defaults("guard", $guard);
+Route::middleware("auth:guru")->prefix("guru")->group(function () {
+    Route::get("/dashboard", [DashboardController::class, "index"])->name("guru.dashboard")->defaults("guard", "guru");
+});
+
+Route::middleware("auth:santri")->prefix("santri")->group(function () {
+    Route::get("/dashboard", [DashboardController::class, "index"])->name("santri.dashboard")->defaults("guard", "santri");
+});
+
+Route::middleware("auth:wali")->prefix("wali")->group(function () {
+    Route::get("/dashboard", [DashboardController::class, "index"])->name("wali.dashboard")->defaults("guard", "wali");
+});
+
+// Akademik routes - accessible by guru and web (admin)
+Route::middleware(["auth:guru,web"])->group(function () {
+    // Akademik routes (penilaian, absensi, mapel)
+    Route::prefix("akademik")->name("akademik.")->group(function () {
+        // Mapel routes
+        Route::resource("mapel", MapelController::class)->except(["show", "create", "edit"]);
+        
+        // Absensi routes
+        Route::resource("absensi", AbsensiController::class)->only(["index", "update"]);
+        Route::get("absensi/santri/{guruMapel}", [AbsensiController::class, "getSiswaList"])
+            ->name("absensi.santri-list");
+
+        // Penilaian routes dengan custom upload
+        Route::resource("penilaian", PenilaianController::class)
+            ->only(["index", "store", "update", "destroy"]);
+        Route::post("penilaian/upload", [PenilaianController::class, "uploadAndProcessPdf"])
+            ->name("penilaian.upload");
     });
-<<<<<<< HEAD
+});
 
-    // 1. Gunakan Route::resource untuk Penilaian
-    // Hanya sertakan index, store, update, destroy
-    Route::resource('penilaian', PenilaianController::class)->only([
-        'index', // GET /penilaian (Tabel utama)
-        'store', // POST /penilaian (Menyimpan data baru dari modal CREATE)
-        'update', // PUT/PATCH /penilaian/{penilaian} (Memperbarui data dari modal EDIT)
-        'destroy', // DELETE /penilaian/{penilaian} (Menghapus data)
-    ]);
-  
-    // 2. Tambahkan custom route untuk Upload PDF
-    Route::post('penilaian/upload-pdf', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload.pdf');
-
-    Route::resource('mapel', App\Http\Controllers\Akademik\MapelController::class)->names('akademik.mapel')->except(['show', 'create', 'edit']);
-    
-    // ATAU jika Anda hanya ingin rute yang diperlukan:
-    Route::prefix('akademik')->name('akademik.')->group(function () {
-        Route::post('mapel', [App\Http\Controllers\Akademik\MapelController::class, 'store'])->name('mapel.store');
-        Route::put('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'update'])->name('mapel.update');
-        Route::delete('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'destroy'])->name('mapel.destroy');
-        Route::get('mapel', [App\Http\Controllers\Akademik\MapelController::class, 'index'])->name('mapel.index');
-        // Jika Anda ingin detail, aktifkan ini juga
-        Route::get('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'show'])->name('mapel.show');
-    });
-    
+// User management routes - admin only
+Route::middleware("auth:web")->group(function () {
     Route::resource("santri", SantriController::class);
     Route::resource("wali", WaliController::class);
     Route::resource("user", UserController::class);
-=======
->>>>>>> 98f639d64081b54f598da9eeff848454bc5b332b
-}
-
-// Define resource routes outside the foreach to avoid multiple definitions
-// These routes will be accessible without specific guard middleware, but the controller handles authentication
-Route::resource('penilaian', PenilaianController::class)->only([
-    'index', // GET /penilaian (Tabel utama)
-    'store', // POST /penilaian (Menyimpan data baru dari modal CREATE)
-    'update', // PUT/PATCH /penilaian/{penilaian} (Memperbarui data dari modal EDIT)
-    'destroy', // DELETE /penilaian/{penilaian} (Menghapus data)
-]);
-
-// Custom route untuk Upload PDF
-Route::post('penilaian/upload-pdf', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload.pdf');
-
-Route::resource("santri", SantriController::class);
-Route::resource("wali", WaliController::class);
-Route::resource("user", UserController::class);
+});

@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->foreignId("santri_id")->constrained("santris");
             $table->foreignId("profile_wali_id")->constrained("wali_profile");
             $table->string("nama");
+            $table->integer('nisn')->unique();
             $table->string("kelas")->nullable();
             $table->string("asrama")->nullable();
             $table->string("no_hp")->nullable();
