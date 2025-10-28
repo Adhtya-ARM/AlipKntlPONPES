@@ -7,6 +7,7 @@ use App\Http\Controllers\User\SantriController;
 use App\Http\Controllers\User\WaliController;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\Akademik\PenilaianController;
+use App\Http\Controllers\Akademik\MapelController;
 use Illuminate\Support\Facades\Config;
 // Ambil semua guard berbasis sesi dari config/auth.php
 
@@ -49,10 +50,22 @@ foreach ($webGuards as $guard) {
         'update', // PUT/PATCH /penilaian/{penilaian} (Memperbarui data dari modal EDIT)
         'destroy', // DELETE /penilaian/{penilaian} (Menghapus data)
     ]);
-    
+  
     // 2. Tambahkan custom route untuk Upload PDF
     Route::post('penilaian/upload-pdf', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload.pdf');
 
+    Route::resource('mapel', App\Http\Controllers\Akademik\MapelController::class)->names('akademik.mapel')->except(['show', 'create', 'edit']);
+    
+    // ATAU jika Anda hanya ingin rute yang diperlukan:
+    Route::prefix('akademik')->name('akademik.')->group(function () {
+        Route::post('mapel', [App\Http\Controllers\Akademik\MapelController::class, 'store'])->name('mapel.store');
+        Route::put('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'update'])->name('mapel.update');
+        Route::delete('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'destroy'])->name('mapel.destroy');
+        Route::get('mapel', [App\Http\Controllers\Akademik\MapelController::class, 'index'])->name('mapel.index');
+        // Jika Anda ingin detail, aktifkan ini juga
+        Route::get('mapel/{mapel}', [App\Http\Controllers\Akademik\MapelController::class, 'show'])->name('mapel.show');
+    });
+    
     Route::resource("santri", SantriController::class);
     Route::resource("wali", WaliController::class);
     Route::resource("user", UserController::class);

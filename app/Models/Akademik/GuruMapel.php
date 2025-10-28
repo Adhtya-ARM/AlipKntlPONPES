@@ -33,16 +33,13 @@ class GuruMapel extends Model
     /**
      * Relasi ke GuruProfile (Banyak GuruMapel dimiliki oleh satu GuruProfile).
      */
-    public function guruProfile()
-    {
-        return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
-    }
-
-    /**
-     * Relasi ke Mapel (Banyak GuruMapel dimiliki oleh satu Mapel).
-     */
-    public function mapel()
-    {
-        return $this->belongsTo(Mapel::class, 'mapel_id');
-    }
+     public function mapel()
+     {
+         return $this->belongsTo(Mapel::class, 'mapel_id');
+     }
+     
+     public function guruProfile()
+     {
+         return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
+     }
 }

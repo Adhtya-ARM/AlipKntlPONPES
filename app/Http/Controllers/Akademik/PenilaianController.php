@@ -86,7 +86,7 @@ class PenilaianController extends Controller
 
         // 3. Ambil ID SantriProfile yang sesuai dengan filter Kelas
         $santriProfiles = SantriProfile::query()
-            ->with("santri:id,nis,username")
+            ->with("santri:id,username")
             // 🌟 REVISI 3: Ganti where('kelas', ...) menjadi where('kelas', 'LIKE', ...)
             ->where("kelas", 'LIKE', $kelasFilter) 
             ->orderBy("nama")

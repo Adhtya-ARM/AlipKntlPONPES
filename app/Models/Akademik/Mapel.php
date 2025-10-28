@@ -19,26 +19,25 @@ class Mapel extends Model
     /**
      * Relasi One-to-Many: Satu Mata Pelajaran memiliki banyak Penilaian.
      */
-    public function penilaians()
-    {
-        return $this->hasMany(Penilaian::class, "mapel_id");
-    }
-
-    /**
-     * Relasi Many-to-Many: Mata Pelajaran diajar oleh banyak Guru (User).
-     */
-    public function gurus()
-    {
-        return $this->belongsToMany(
-            GuruProfile::class,
-            "guru_mapel",
-            "mapel_id",
-            "guru_profile_id",
-        );
-    }
-    
-    public function guruMapels()
-        {
-            return $this->hasMany(GuruMapel::class, 'mapel_id');
-        }
+     public function guruMapel()
+     {
+         // Relasi Mapel ke GuruMapel (One-to-Many)
+         return $this->hasMany(GuruMapel::class, 'mapel_id');
+     }
+     
+     public function guruProfiles()
+         {
+             return $this->belongsToMany(
+                 \App\Models\User\GuruProfile::class,
+                 'guru_mapel',
+                 'mapel_id',
+                 'guru_profile_id'
+             )->withTimestamps();
+         }
+     
+     public function penilaians()
+     {
+         // Relasi Mapel ke Penilaian (One-to-Many)
+         return $this->hasMany(Penilaian::class, 'mapel_id');
+     }
 }

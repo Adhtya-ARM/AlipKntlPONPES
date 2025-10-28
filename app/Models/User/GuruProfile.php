@@ -24,14 +24,14 @@ class GuruProfile extends Model
     }
 
     public function mapels()
-    {
-        return $this->belongsToMany(
-            Mapel::class,
-            "guru_mapel",
-            "guru_profile_id",
-            "mapel_id",
-        );
-    }
+        {
+            return $this->belongsToMany(
+                \App\Models\Akademik\Mapel::class,
+                'guru_mapel',
+                'guru_profile_id',
+                'mapel_id'
+            )->withTimestamps();
+        }
     
     public function guruMapels()
         {
