@@ -21,11 +21,27 @@ class DashboardController extends Controller
      * Menampilkan dashboard berdasarkan role/guard yang sedang login.
      * Route ini akan dipanggil oleh setiap role: /guru/dashboard, /santri/dashboard, dst.
      */
+<<<<<<< HEAD
     public function index(Request $request, string $guard)
     {
         // 1. Validasi Akses dan Guard
         // Middleware ('auth:guard') seharusnya sudah memastikan user login
         // Kita hanya perlu memastikan guard yang diminta di URL benar-benar di-autentikasi.
+=======
+    public function index()
+    {
+        // 1. Ambil guard dari route defaults
+        $guard = request()->route()->defaults['guard'] ?? 'web';
+
+        // 2. Validasi Guard
+        $allGuards = array_keys(Config::get('auth.guards'));
+        if (!in_array($guard, $allGuards)) {
+            // Jika guard yang diminta di URL tidak valid, redirect ke login
+            return redirect('/login');
+        }
+
+        // 3. Cek apakah pengguna benar-benar login di guard tersebut
+>>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
         if (!Auth::guard($guard)->check()) {
              // Jika middleware gagal, atau user mencoba akses langsung tanpa auth.
             return redirect()->route('login');
@@ -33,6 +49,7 @@ class DashboardController extends Controller
 
         // Ambil data pengguna yang sedang login
         $user = Auth::guard($guard)->user();
+<<<<<<< HEAD
         
         // 2. Tentukan Data dan View berdasarkan Role
         switch ($guard) {
@@ -47,6 +64,43 @@ class DashboardController extends Controller
                 
             case 'web':
                 return $this->handleWebDashboard($user);
+=======
+
+        // Tentukan data dan view berdasarkan role (guard)
+        switch ($guard) {
+            case 'guru':
+                // Ambil data untuk dashboard guru
+                $guruProfile = $user->guruProfile; // Use the correct relationship method
+                if (!$guruProfile) {
+                    // Handle case where guruProfile is null
+                    return redirect()->route('login')->with('error', 'Profile guru tidak ditemukan.');
+                }
+                $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
+                $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+
+                // Hitung total santri yang diajar (unik berdasarkan kelas mapel)
+                $kelasMapels = $mapels->pluck('kelas')->unique();
+                $totalSantri = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->count();
+
+                // Total penilaian yang sudah diinput oleh guru ini
+                $totalPenilaian = \App\Models\Akademik\Penilaian::where('guru_profile_id', $guruProfile->id)->count();
+
+                return view('dashboard.guru', compact('mapels', 'totalSantri', 'totalPenilaian'));
+
+            case 'santri':
+
+
+
+                return view('dashboard.santri');
+
+            case 'wali':
+
+                return view('dashboard.wali');
+
+            case 'web':
+
+                return view('admin.dashboard');
+>>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
 
             default:
                 // Jika route /nama_guard_aneh/dashboard diakses, kembalikan 403 atau redirect.
@@ -54,6 +108,7 @@ class DashboardController extends Controller
         }
     }
 
+<<<<<<< HEAD
     // --- LOGIKA DASHBOARD TERPISAH (CLEANER CODE) ---
 
     private function handleGuruDashboard($user)
@@ -113,5 +168,48 @@ class DashboardController extends Controller
         $totalSantri = Santri::count();
         
         return view('dashboard.web', compact('totalGuru', 'totalSantri', 'user'));
+=======
+    public function guruSantri()
+    {
+        $user = Auth::guard('guru')->user();
+        $guruProfile = $user->guruProfile;
+        if (!$guruProfile) {
+            return redirect()->route('guru.dashboard')->with('error', 'Profile guru tidak ditemukan.');
+        }
+
+        // Ambil mapel yang diajar guru
+        $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
+        $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+
+        // Ambil kelas yang diajar
+        $kelasMapels = $mapels->pluck('kelas')->unique();
+
+        // Ambil santri yang ada di kelas tersebut
+        $santris = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->with('santri')->paginate(10);
+
+        return view('dashboard.guru-santri', compact('santris'));
+    }
+
+    public function guruWali()
+    {
+        $user = Auth::guard('guru')->user();
+        $guruProfile = $user->guruProfile;
+        if (!$guruProfile) {
+            return redirect()->route('guru.dashboard')->with('error', 'Profile guru tidak ditemukan.');
+        }
+
+        // Ambil mapel yang diajar guru
+        $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
+        $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+
+        // Ambil kelas yang diajar
+        $kelasMapels = $mapels->pluck('kelas')->unique();
+
+        // Ambil wali santri yang ada di kelas tersebut
+        $waliIds = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->pluck('profile_wali_id')->unique();
+        $walis = \App\Models\User\WaliProfile::whereIn('id', $waliIds)->paginate(10);
+
+        return view('dashboard.guru-wali', compact('walis'));
+>>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
     }
 }

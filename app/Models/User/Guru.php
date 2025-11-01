@@ -26,8 +26,8 @@ class Guru extends Authenticatable
 
     public function getDisplayNameAttribute()
     {
-        if ($this->relationLoaded('profile') && $this->profile) {
-            return $this->profile->nama ?? $this->username;
+        if ($this->relationLoaded('guruProfile') && $this->guruProfile) {
+            return $this->guruProfile->nama ?? $this->username;
         }
     }
 

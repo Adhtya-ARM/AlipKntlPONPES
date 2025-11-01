@@ -30,6 +30,7 @@ class GuruMapel extends Model
         'tahun_ajaran',
     ];
 
+<<<<<<< HEAD
     public function mapel(): BelongsTo
     {
         return $this->belongsTo(Mapel::class);
@@ -60,3 +61,33 @@ class GuruMapel extends Model
         return $this->hasMany(\App\Models\Akademik\SantriMapel::class, 'guru_mapel_id');
     }
 }
+=======
+    // Karena ini adalah tabel pivot, secara default ia tidak memiliki timestamps.
+    // Jika tabel Anda memiliki kolom created_at dan updated_at, atur ini menjadi true.
+    public $timestamps = false; // Ubah menjadi true jika tabel Anda memiliki timestamps
+
+    /**
+     * Relasi ke Absensi
+     */
+    public function absensi()
+    {
+        return $this->hasMany(\App\Models\Akademik\Absensi::class, 'guru_profile_id', 'guru_profile_id')
+                    ->whereColumn('mapel_id', 'guru_mapel.mapel_id');
+    }
+
+    // Relasi (Relationships)
+
+    /**
+     * Relasi ke GuruProfile (Banyak GuruMapel dimiliki oleh satu GuruProfile).
+     */
+     public function mapel()
+     {
+         return $this->belongsTo(Mapel::class, 'mapel_id');
+     }
+     
+     public function guruProfile()
+     {
+         return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
+     }
+}
+>>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
