@@ -14,21 +14,20 @@ class Santri extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles;
 
-    protected $fillable = ["username", "password"];
+    protected $table = "santris";
+
+    protected $fillable = ["username", "password", "nis"];
 
     protected $hidden = ["password", "remember_token"];
 
-    public function findForAuth($username)
+    public function getAuthIdentifierName(): string
     {
-        return $this->where("username", $username)->first();
+        return "nis";
     }
 
-    /**
-     * Tentukan field username untuk autentikasi.
-     */
-    public function getAuthUsername()
+    public function getAuthIdentifier(): mixed
     {
-        return "username";
+        return $this->nis;
     }
 
     protected function casts(): array
@@ -38,7 +37,7 @@ class Santri extends Authenticatable
         ];
     }
 
-    public function SantriProfile()
+    public function SantriProfile(): HasOne
     {
         return $this->hasOne(SantriProfile::class);
     }

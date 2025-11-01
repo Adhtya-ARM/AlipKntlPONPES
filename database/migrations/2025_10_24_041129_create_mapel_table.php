@@ -13,9 +13,6 @@ return new class extends Migration {
         Schema::create("mapel", function (Blueprint $table) {
             $table->id();
             $table->string("nama_mapel");
-            $table->integer("kelas");
-            $table->integer("tahun_ajaran");
-            $table->enum("semester", ["ganjil", "genap"])->default("ganjil");
             $table->timestamps();
         });
     }

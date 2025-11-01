@@ -2,162 +2,284 @@
 
 namespace App\Http\Controllers\Akademik;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
+
 use App\Http\Controllers\Controller;
 use App\Models\Akademik\Mapel;
 use App\Models\Akademik\GuruMapel;
-use App\Models\User\GuruProfile;
-use Illuminate\Http\Request;
+use App\Models\Akademik\Kelas;
+use App\Models\Akademik\RencanaPembelajaran;
+use App\Models\Akademik\AbsensiHeader;
+use App\Models\Akademik\AbsensiDetail;
+use App\Models\Akademik\Penilaian;
+use App\Models\User\SantriProfile;
+use App\Models\Akademik\SantriMapel;
 
 class MapelController extends Controller
 {
     /**
-     * Menampilkan daftar mapel dengan jumlah guru pengampu.
+     * Tampilkan daftar mapel yang diajar oleh guru yang login.
      */
     public function index()
     {
-        $query = Mapel::withCount('guruProfiles')
-            ->orderBy('kelas')
-            ->orderBy('nama_mapel');
+        $guruId = auth()->user()->guruProfile->id;
 
-        // Jika guru login, hanya tampilkan mapel yang dia ajar
-        if (auth('guru')->check()) {
-            $guru = auth('guru')->user();
-            $guruProfile = $guru->profile; // relasi hasOne di model Guru
+        $guruMapels = GuruMapel::with(["mapel", "kelas", "rencanaPembelajaran"])
+            ->withCount("santriMapel") // ✅ ini penting!
+            ->where("guru_profile_id", $guruId)
+            ->get();
 
-            if ($guruProfile) {
-                $mapelIds = GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
-                $query->whereIn('id', $mapelIds);
-            } else {
-                $query->whereNull('id'); // tidak tampil jika belum ada profil
-            }
-        }
+        $kelas = Kelas::orderBy("nama_kelas")->get();
 
-        $mapels = $query->paginate(15);
-
-        return view('akademik.mapel.index', compact('mapels'));
+        return view("akademik.mapel.index", compact("guruMapels", "kelas"));
     }
 
     /**
-     * Menampilkan detail mapel dan guru pengampu.
-     */
-    public function show($id)
-    {
-        $mapel = Mapel::with(['guruProfiles.user:id,username'])->findOrFail($id);
-        $gurus = $mapel->guruProfiles;
-
-        return view('akademik.mapel.show', compact('mapel', 'gurus'));
-    }
-
-    /**
-     * Form tambah mapel baru.
-     */
-    public function create()
-    {
-        $semesters = ['Ganjil', 'Genap'];
-        $tahunAjarans = $this->generateTahunAjaranOptions();
-
-        return view('akademik.mapel.create', compact('semesters', 'tahunAjarans'));
-    }
-
-    /**
-     * Simpan mapel baru dan otomatis tambahkan ke tabel guru_mapel.
+     * Simpan Mapel baru + GuruMapel + Rencana Pembelajaran kosong.
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'nama_mapel' => 'required|string|max:255',
-            'kelas' => 'required|string|max:10',
-            'semester' => 'required|in:Ganjil,Genap',
-            'tahun_ajaran' => 'required|string|max:20',
+        $validated = $request->validate([
+            "nama_mapel" => "required|string|max:255",
+            "kelas_id" => "required|integer|exists:kelas,id",
+            "tahun_ajaran" => "required|string",
+            "semester" => "required|string|in:Ganjil,Genap",
         ]);
 
-        // ✅ Simpan mapel baru
-        $mapel = Mapel::create([
-            'nama_mapel' => $request->nama_mapel,
-            'kelas' => $request->kelas,
-            'semester' => $request->semester,
-            'tahun_ajaran' => $request->tahun_ajaran,
-        ]);
+        $guruProfile = Auth::user()->guruProfile;
 
-        // ✅ Jika guru login, otomatis masukkan ke guru_mapel
-        if (auth('guru')->check()) {
-            $guru = auth('guru')->user();
-            $guruProfile = $guru->profile; // relasi hasOne di model Guru
-
-            if ($guruProfile) {
-                GuruMapel::firstOrCreate([
-                    'guru_profile_id' => $guruProfile->id,
-                    'mapel_id' => $mapel->id,
-                ]);
-            }
+        if (!$guruProfile) {
+            return response()->json(
+                [
+                    "message" =>
+                        "Guru profile tidak ditemukan. Pastikan akun guru sudah lengkap.",
+                ],
+                404,
+            );
         }
 
-        return redirect()->route('akademik.mapel.index')
-            ->with('success', 'Mapel berhasil ditambahkan dan dikaitkan dengan guru yang login.');
+        // 1️⃣ Mapel Master - berdasarkan nama_mapel + periode
+        $mapel = Mapel::firstOrCreate([
+            "nama_mapel" => $validated["nama_mapel"],
+        ]);
+
+        // 2️⃣ GuruMapel - tambahkan tahun_ajaran & semester
+        $guruMapel = GuruMapel::firstOrCreate([
+            "guru_profile_id" => $guruProfile->id,
+            "mapel_id" => $mapel->id,
+            "kelas_id" => $validated["kelas_id"],
+            "tahun_ajaran" => $validated["tahun_ajaran"],
+            "semester" => $validated["semester"],
+        ]);
+
+        // 3️⃣ Buat Rencana Pembelajaran awal
+        RencanaPembelajaran::firstOrCreate(
+            ["guru_mapel_id" => $guruMapel->id],
+            ["jumlah_pertemuan" => 0, "jumlah_bab" => 0, "keterangan" => null],
+        );
+
+        return response()->json(
+            [
+                "message" => "Mapel dan penugasan berhasil disimpan.",
+            ],
+            201,
+        );
     }
 
     /**
-     * Form edit mapel.
-     */
-    public function edit(Mapel $mapel)
-    {
-        $semesters = ['Ganjil', 'Genap'];
-        $tahunAjarans = $this->generateTahunAjaranOptions();
-
-        return view('akademik.mapel.edit', compact('mapel', 'semesters', 'tahunAjarans'));
-    }
-
-    /**
-     * Update data mapel.
+     * Update Mapel dan Penugasan.
      */
     public function update(Request $request, Mapel $mapel)
     {
-        $request->validate([
-            'nama_mapel' => 'required|string|max:255',
-            'kelas' => 'required|string|max:10',
-            'semester' => 'required|in:Ganjil,Genap',
-            'tahun_ajaran' => 'required|string|max:20',
-        ]);
+        try {
+            $validated = $request->validate([
+                "nama_mapel" => "required|string|max:255",
+                "kelas_id" => "required|integer|exists:kelas,id",
+                "tahun_ajaran" => "required|string",
+                "semester" => "required|string|in:Ganjil,Genap",
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(
+                [
+                    "message" => "Validasi gagal",
+                    "errors" => $e->errors(),
+                ],
+                422,
+            );
+        }
 
+        $guruProfile = Auth::user()->guruProfile;
+
+        // Update Mapel Master
         $mapel->update([
-            'nama_mapel' => $request->nama_mapel,
-            'kelas' => $request->kelas,
-            'semester' => $request->semester,
-            'tahun_ajaran' => $request->tahun_ajaran,
+            "nama_mapel" => $validated["nama_mapel"],
+            "tahun_ajaran" => $validated["tahun_ajaran"],
+            "semester" => $validated["semester"],
         ]);
 
-        return redirect()->route('akademik.mapel.index')
-            ->with('success', 'Mapel berhasil diperbarui.');
+        // Update GuruMapel (kelas_id)
+        $guruMapel = GuruMapel::where("guru_profile_id", $guruProfile->id)
+            ->where("mapel_id", $mapel->id)
+            ->first();
+
+        if ($guruMapel) {
+            $guruMapel->update(["kelas_id" => $validated["kelas_id"]]);
+            return response()->json(
+                ["message" => "Mapel dan penugasan berhasil diperbarui!"],
+                200,
+            );
+        }
+
+        return response()->json(
+            ["message" => "Penugasan guru tidak ditemukan."],
+            404,
+        );
     }
 
     /**
-     * Hapus mapel.
+     * Update Rencana Pembelajaran (Target Pertemuan dan Bab).
+     */
+    public function updateRencana(Request $request, GuruMapel $guruMapel)
+    {
+        try {
+            $validated = $request->validate([
+                "jumlah_pertemuan" => "required|integer|min:0",
+                "jumlah_bab" => "required|integer|min:0",
+                "keterangan" => "nullable|string",
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json(
+                [
+                    "message" => "Validasi gagal",
+                    "errors" => $e->errors(),
+                ],
+                422,
+            );
+        }
+
+        // Cek kepemilikan
+        if ($guruMapel->guru_profile_id !== Auth::user()->guruProfile->id) {
+            return response()->json(["message" => "Akses ditolak."], 403);
+        }
+
+        // Cari atau buat rencana
+        $rencana = RencanaPembelajaran::firstOrCreate(
+            ["guru_mapel_id" => $guruMapel->id],
+            ["jumlah_pertemuan" => 0, "jumlah_bab" => 0],
+        );
+
+        $rencana->update($validated);
+
+        return response()->json(
+            ["message" => "Rencana pembelajaran berhasil disimpan!"],
+            200,
+        );
+    }
+
+    public function getSiswa($guruMapelId)
+    {
+        $guruMapel = GuruMapel::with("kelas")->findOrFail($guruMapelId);
+
+        if (!$guruMapel->kelas_id) {
+            return response()->json(
+                ["message" => "Kelas belum ditetapkan untuk mapel ini."],
+                400,
+            );
+        }
+
+        // Ambil santri aktif berdasarkan kelas di tabel santri_kelas
+        $santri = SantriProfile::whereHas("santriKelas", function ($q) use (
+            $guruMapel,
+        ) {
+            $q->where("kelas_id", $guruMapel->kelas_id);
+        })
+            ->select("id", "nama")
+            ->orderBy("nama")
+            ->get();
+
+        // Ambil santri yang sudah mengikuti mapel ini
+        $terpilih = SantriMapel::where("guru_mapel_id", $guruMapel->id)
+            ->pluck("santri_profile_id")
+            ->toArray();
+
+        return response()->json([
+            "santri" => $santri,
+            "terpilih" => $terpilih,
+        ]);
+    }
+
+    /**
+     * Simpan daftar santri ke tabel santri_mapel
+     */
+    public function updateSiswa(Request $request, $guruMapelId)
+    {
+        try {
+            $guruMapel = GuruMapel::findOrFail($guruMapelId, );
+
+            // Ambil daftar santri dari request (dari JSON)
+            $santriIds = $request->input("santri", []); // <--- ✅ key harus sama persis
+
+            // Validasi ID agar benar-benar ada
+            $validIds = SantriProfile::whereIn( "id", $santriIds, )->pluck("id")->toArray();
+            SantriMapel::where("guru_mapel_id",$guruMapel->id,)->delete();
+
+            foreach ($validIds as $id) { SantriMapel::create(["guru_mapel_id" => $guruMapel->id,"santri_profile_id" => $id,]);
+            }
+
+            return response()->json(
+                ["message" => "Daftar siswa berhasil diperbarui."],
+                200,
+            );
+        } catch (\Throwable $e) {
+            return response()->json(
+                [
+                    "message" => "Gagal memperbarui daftar siswa.",
+                    "error" => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    /**
+     * Hapus Mapel dan Penugasan Guru.
      */
     public function destroy(Mapel $mapel)
     {
-        // Hapus relasi guru_mapel juga
-        GuruMapel::where('mapel_id', $mapel->id)->delete();
+        $guruProfile = Auth::user()->guruProfile;
 
-        $mapel->delete();
+        $guruMapels = GuruMapel::where("guru_profile_id", $guruProfile->id)
+            ->where("mapel_id", $mapel->id)
+            ->get();
 
-        return redirect()->route('akademik.mapel.index')
-            ->with('success', 'Mapel berhasil dihapus.');
-    }
+        foreach ($guruMapels as $gm) {
+            // Hapus absensi & penilaian terkait (cascade manual)
+            AbsensiHeader::where("guru_mapel_id", $gm->id)->each(function (
+                $header,
+            ) {
+                AbsensiDetail::where(
+                    "absensi_header_id",
+                    $header->id,
+                )->delete();
+                $header->delete();
+            });
 
-    // ==========================================================
-    // Helper Dropdown Tahun Ajaran
-    // ==========================================================
-    private function generateTahunAjaranOptions()
-    {
-        $currentYear = date('Y');
-        $options = [];
+            Penilaian::where("guru_mapel_id", $gm->id)->delete();
+            RencanaPembelajaran::where("guru_mapel_id", $gm->id)->delete();
 
-        for ($i = -2; $i <= 2; $i++) {
-            $start = $currentYear + $i;
-            $end = $start + 1;
-            $options[] = "$start/$end";
+            $gm->delete();
         }
 
-        return $options;
+        // Jika tidak ada guru lain yang mengajar mapel ini, hapus mapel master
+        if (!GuruMapel::where("mapel_id", $mapel->id)->exists()) {
+            $mapel->delete();
+        }
+
+        return response()->json(
+            ["message" => "Mapel dan semua relasi berhasil dihapus."],
+            200,
+        );
     }
 }

@@ -4,42 +4,59 @@ namespace App\Models\Akademik;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 use App\Models\Akademik\Mapel;
+use App\Models\Akademik\Kelas;
+use App\Models\Akademik\RencanaPembelajaran;
+use App\Models\Akademik\Penilaian;
 use App\Models\User\GuruProfile;
-/**
- * Model untuk tabel pivot 'guru_mapel'.
- * Menghubungkan GuruProfile dengan Mapel yang dia ajar.
- */
+use App\Models\User\SantriProfile;
+
 class GuruMapel extends Model
 {
     use HasFactory;
-    
-    // Nama tabel di database Anda
+
     protected $table = 'guru_mapel';
 
-    // Kolom-kolom yang boleh diisi (mass assignable)
     protected $fillable = [
         'guru_profile_id',
         'mapel_id',
+        'kelas_id',
+        'semester',
+        'tahun_ajaran',
     ];
 
-    // Karena ini adalah tabel pivot, secara default ia tidak memiliki timestamps.
-    // Jika tabel Anda memiliki kolom created_at dan updated_at, atur ini menjadi true.
-    public $timestamps = false; // Ubah menjadi true jika tabel Anda memiliki timestamps
+    public function mapel(): BelongsTo
+    {
+        return $this->belongsTo(Mapel::class);
+    }
 
-    // Relasi (Relationships)
+    public function kelas(): BelongsTo
+    {
+        return $this->belongsTo(Kelas::class, 'kelas_id');
+    }
 
-    /**
-     * Relasi ke GuruProfile (Banyak GuruMapel dimiliki oleh satu GuruProfile).
-     */
-     public function mapel()
-     {
-         return $this->belongsTo(Mapel::class, 'mapel_id');
-     }
-     
-     public function guruProfile()
-     {
-         return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
-     }
+    public function rencanaPembelajaran(): HasOne
+    {
+        return $this->hasOne(RencanaPembelajaran::class, 'guru_mapel_id');
+    }
+
+    public function absensiHeaders(): HasMany
+    {
+        return $this->hasMany(AbsensiHeader::class, 'guru_mapel_id');
+    }
+
+    public function penilaians(): HasMany
+    {
+        return $this->hasMany(Penilaian::class, 'guru_mapel_id');
+    }
+
+    public function santriMapel(): HasMany
+    {
+        return $this->hasMany(\App\Models\Akademik\SantriMapel::class, 'guru_mapel_id');
+    }
 }

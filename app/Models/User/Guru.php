@@ -38,9 +38,9 @@ class Guru extends Authenticatable
         ];
     }
 
-    public function Profile()
+    public function guruProfile()
     {
-        return $this->hasOne(GuruProfile::class, 'guru_id');
+        return $this->HasOne(GuruProfile::class, 'guru_id');
     }
 
 }

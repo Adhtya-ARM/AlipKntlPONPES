@@ -13,11 +13,9 @@ return new class extends Migration {
         Schema::create("santri_profile", function (Blueprint $table) {
             $table->id();
             $table->foreignId("santri_id")->constrained("santris");
-            $table->foreignId("profile_wali_id")->constrained("wali_profile");
+            $table->foreignId("wali_profile_id")->constrained("wali_profile");
             $table->string("nama");
-            $table->integer('nisn')->unique();
-            $table->string("kelas")->nullable();
-            $table->string("asrama")->nullable();
+            $table->integer("nisn")->unique();
             $table->string("no_hp")->nullable();
             $table->text("alamat")->nullable();
             $table

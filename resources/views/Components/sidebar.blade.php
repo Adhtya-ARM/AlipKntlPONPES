@@ -33,7 +33,7 @@
 
     {{-- Logo/Branding --}}
     <div class="p-4 flex items-center h-16 border-b border-gray-200">
-        <h1 class="text-lg font-bold text-gray-800">Acme Inc.</h1>
+        <h1 class="text-lg font-bold text-gray-800"> {{ config('app.name', 'Laravel App') }} </h1>
     </div>
 
     <nav class="flex-1 p-4 space-y-1 text-sm">
@@ -118,6 +118,10 @@
                 <a href="{{ route('akademik.absensi.index') }}" class="flex items-center px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h.01M7 15h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     Absensi
+                </a>
+                <a href="{{ route('akademik.kelas.index') }}" class="flex items-center px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20h10m-10 0v-2a3 3 0 015.356-1.857M7 20h10m-10 0v-2c0-.656-.126-1.283-.356-1.857m-2 2a4 4 0 100-8 4 4 0 000 8zM12 10a4 4 0 100-8 4 4 0 000 8z"></path></svg>
+                    Kelas
                 </a>
             </div>
         </div>

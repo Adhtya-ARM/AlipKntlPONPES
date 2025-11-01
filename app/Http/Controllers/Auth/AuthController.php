@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Validation\ValidationException; // Penting untuk penanganan error
 
 class AuthController extends Controller
 {
@@ -13,24 +14,25 @@ class AuthController extends Controller
 
     public function __construct()
     {
-        // Ambil semua guard berbasis sesi: 'web', 'santri', 'wali', 'guru'
+        // Mengambil daftar semua guard yang menggunakan driver 'session' (web, santri, guru, wali)
         $allGuards = Config::get('auth.guards');
         $this->validGuards = array_keys(array_filter($allGuards, fn($g) => $g['driver'] === 'session'));
     }
 
+    // [GET] Menampilkan Form Login
     public function showLoginForm()
     {
-        // View login sederhana, tanpa perlu input guard
         return view('auth.login');
     }
 
+    // [POST] Memproses Login Multi-Guard
     public function login(Request $request)
     {
-        $loginField = 'username';
+        $inputField = 'username'; // Nama input field di form Anda (diisi NIS/Username)
         
         // 1. Validasi Input
         $credentials = $request->validate([
-            $loginField => 'required|string',
+            $inputField => 'required|string',
             'password' => 'required|string',
         ]);
         
@@ -38,27 +40,39 @@ class AuthController extends Controller
         
         // 2. Iterasi dan Deteksi Role Otomatis
         foreach ($this->validGuards as $guard) {
-            // Coba login menggunakan guard saat ini
-            if (Auth::guard($guard)->attempt($credentials, $remember)) {
+            $dbLoginKey = match ($guard) {
+                'santris' => 'nis',      // Guard 'santri' harus mencari kolom 'nis'
+                default => 'username', // Guard lain (web, guru, wali) mencari kolom 'username'
+            };
+
+            // Membuat array kredensial yang disesuaikan
+            $authCredentials = [
+                $dbLoginKey => $credentials[$inputField], 
+                'password' => $credentials['password'],
+            ];
+
+            // Coba otentikasi.
+            if (Auth::guard($guard)->attempt($authCredentials, $remember)) {
                 $request->session()->regenerate();
 
-                // Jika berhasil, redirect ke dashboard guard tersebut
-                // Contoh: Jika login berhasil di guard 'guru', redirect ke /guru/dashboard
-                return redirect("/{$guard}/dashboard");
+                return redirect()->intended(route($guard . '.dashboard'));
             }
         }
         
         // 3. Gagal Login (setelah mencoba SEMUA Guard)
-        return back()->withErrors([
-            $loginField => 'Username atau Password tidak cocok untuk role manapun.',
-        ])->onlyInput($loginField);
+        // Melempar exception agar error ditampilkan di form login
+        throw ValidationException::withMessages([
+            $inputField => 'Kredensial tidak cocok untuk role manapun.',
+        ])->onlyInput($inputField);
     }
 
-    // Metode Logout tetap memerlukan parameter untuk mengakhiri sesi yang benar
+    // [POST] Memproses Logout Multi-Guard
+    // Memerlukan parameter {guard} dari route untuk logout yang benar
     public function logout(Request $request, $guard)
     {
         if (!in_array($guard, $this->validGuards)) {
-            abort(404, 'Guard tidak ditemukan.');
+            // Seharusnya tidak pernah terjadi jika route didefinisikan dengan benar
+            abort(404, 'Guard tidak ditemukan.'); 
         }
         
         Auth::guard($guard)->logout();

@@ -21,7 +21,7 @@
                 </div>
                 <div>
                     <p class="text-gray-500 text-sm">Total Santri</p>
-                    <p class="text-xl font-semibold text-gray-900">{{ $totalSantri }}</p>
+                   
                 </div>
             </div>
 
@@ -54,7 +54,7 @@
                 </div>
                 <div>
                     <p class="text-gray-500 text-sm">Total Penilaian</p>
-                    <p class="text-xl font-semibold text-gray-900">{{ $totalPenilaian }}</p>
+      
                 </div>
             </div>
 
