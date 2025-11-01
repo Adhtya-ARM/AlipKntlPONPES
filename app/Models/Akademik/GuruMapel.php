@@ -28,6 +28,15 @@ class GuruMapel extends Model
     // Jika tabel Anda memiliki kolom created_at dan updated_at, atur ini menjadi true.
     public $timestamps = false; // Ubah menjadi true jika tabel Anda memiliki timestamps
 
+    /**
+     * Relasi ke Absensi
+     */
+    public function absensi()
+    {
+        return $this->hasMany(\App\Models\Akademik\Absensi::class, 'guru_profile_id', 'guru_profile_id')
+                    ->whereColumn('mapel_id', 'guru_mapel.mapel_id');
+    }
+
     // Relasi (Relationships)
 
     /**

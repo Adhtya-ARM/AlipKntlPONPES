@@ -10,7 +10,7 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create("wali_profile", function (Blueprint $table) {
+        Schema::create("wali_profiles", function (Blueprint $table) {
             $table->id();
             $table->foreignId("wali_id")->constrained("wali");
             $table->string("nama");
@@ -25,6 +25,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists("wali_profile");
+        Schema::dropIfExists("wali_profiles");
     }
 };

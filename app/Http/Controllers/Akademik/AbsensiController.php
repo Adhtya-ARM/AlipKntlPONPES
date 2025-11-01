@@ -23,7 +23,7 @@ class AbsensiController extends Controller
                 return redirect()->back()->with('error', 'Profile guru tidak ditemukan');
             }
 
-            $guruMapels = GuruMapel::with(['mapel', 'absensi'])
+            $guruMapels = GuruMapel::with(['mapel'])
                 ->where('guru_profile_id', $guruProfile->id)
                 ->get();
 
@@ -93,21 +93,14 @@ class AbsensiController extends Controller
                 ];
             });
 
-        // Get or create absensi
-        $absensi = Absensi::firstOrCreate(
-            [
-                'mapel_id' => $guruMapel->mapel_id,
-                'guru_profile_id' => $guruMapel->guru_profile_id
-            ],
-            [
-                'jumlah_pertemuan' => 16, // Default value
-                'jumlah_bab' => 8 // Default value
-            ]
-        );
+        // Get max pertemuan from existing absensi records
+        $maxPertemuan = Absensi::where('mapel_id', $guruMapel->mapel_id)
+            ->where('guru_profile_id', $guruMapel->guru_profile_id)
+            ->max('pertemuan_ke') ?? 16; // Default to 16 if no records
 
         return response()->json([
             'santri' => $santriList,
-            'maxPertemuan' => $absensi->jumlah_pertemuan
+            'maxPertemuan' => $maxPertemuan
         ]);
     }
 
@@ -181,4 +174,3 @@ class AbsensiController extends Controller
         return redirect()->back()->with('success', 'Absensi berhasil dihapus.');
     }
 }
-

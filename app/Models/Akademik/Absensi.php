@@ -14,10 +14,11 @@ class Absensi extends Model
     protected $table = 'absensi';
 
     protected $fillable = [
+        'santri_profile_id',
         'guru_profile_id',
         'mapel_id',
-        'jumlah_pertemuan',
-        'jumlah_bab',
+        'pertemuan_ke',
+        'status',
         'keterangan'
     ];
 
@@ -36,5 +37,12 @@ class Absensi extends Model
     {
         return $this->belongsTo(Mapel::class, 'mapel_id');
     }
-}
 
+    /**
+     * Relasi ke SantriProfile
+     */
+    public function santriProfile()
+    {
+        return $this->belongsTo(\App\Models\User\SantriProfile::class, 'santri_profile_id');
+    }
+}
