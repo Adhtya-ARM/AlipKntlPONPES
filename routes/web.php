@@ -9,18 +9,27 @@ use App\Http\Controllers\DashboardController;
 // === USER CONTROLLERS ===
 use App\Http\Controllers\User\SantriController;
 use App\Http\Controllers\User\WaliController;
+use App\Http\Controllers\User\GuruController;
 use App\Http\Controllers\User\UserController;
-<<<<<<< HEAD
+use App\Http\Controllers\User\GuruAkademikController;
 
 // === AKADEMIK CONTROLLERS ===
-=======
-use App\Http\Controllers\User\GuruController;
-use App\Http\Controllers\Akademik\PenilaianController;
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
-use App\Http\Controllers\Akademik\MapelController;
 use App\Http\Controllers\Akademik\AbsensiController;
 use App\Http\Controllers\Akademik\PenilaianController;
 use App\Http\Controllers\Akademik\KelasController;
+use App\Http\Controllers\Akademik\MapelController;
+use App\Http\Controllers\Akademik\GuruMapelController;
+use App\Http\Controllers\Akademik\RencanaPembelajaranController;
+
+// === SANTRI & WALI CONTROLLERS ===
+use App\Http\Controllers\Santri\SantriAkademikController;
+use App\Http\Controllers\Wali\WaliAkademikController;
+
+// ======================================
+// 🏠 LANDING PAGE
+// ======================================
+use App\Http\Controllers\LandingController;
+Route::get('/', [LandingController::class, 'index'])->name('landing');
 
 // ======================================
 // 🔐 LOGIN & LOGOUT
@@ -37,7 +46,6 @@ Route::middleware('auth:web')->prefix('admin')->group(function () {
         ->name('admin.dashboard')->defaults('guard', 'web');
 });
 
-<<<<<<< HEAD
 Route::middleware('auth:guru')->prefix('guru')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('guru.dashboard')->defaults('guard', 'guru');
@@ -46,85 +54,71 @@ Route::middleware('auth:guru')->prefix('guru')->group(function () {
 Route::middleware('auth:santri')->prefix('santri')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('santri.dashboard')->defaults('guard', 'santri');
+    
+    // Akademik Santri
+    Route::get('/kehadiran', [SantriAkademikController::class, 'kehadiran'])->name('santri.kehadiran');
+    Route::get('/mapel', [SantriAkademikController::class, 'mapel'])->name('santri.mapel');
+    Route::get('/nilai', [SantriAkademikController::class, 'nilai'])->name('santri.nilai');
 });
 
 Route::middleware('auth:wali')->prefix('wali')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('wali.dashboard')->defaults('guard', 'wali');
+    
+    // Monitoring Anak
+    Route::get('/kehadiran', [WaliAkademikController::class, 'kehadiran'])->name('wali.kehadiran');
+    Route::get('/mapel', [WaliAkademikController::class, 'mapel'])->name('wali.mapel');
+    Route::get('/nilai', [WaliAkademikController::class, 'nilai'])->name('wali.nilai');
+});
+
+//========
+//  User Management
+// ========
+Route::middleware(['auth:guru'])->group(function () {
+Route::resource('santri', SantriController::class);
+ Route::resource('wali', WaliController::class);
+ Route::resource('guru', GuruController::class);
 });
 
 // ======================================
 // 🎓 AKADEMIK (Guru & Admin)
 // ======================================
-Route::middleware(['auth:guru,web'])->prefix('akademik')->name('akademik.')->group(function () {
+Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(function () {
 
-    // ---- 🔹 MAPEL ----
-        Route::post('mapel/rencana/{guruMapel}', [MapelController::class, 'updateRencana'])->name('mapel.update-rencana'); // 🔥 harus sebelum resource
-        Route::get('mapel/{guruMapel}/siswa', [MapelController::class, 'getSiswa'])->name('mapel.siswa');
-        Route::post('mapel/{guruMapel}/siswa', [MapelController::class, 'updateSiswa'])->name('mapel.siswa.update');
-        Route::resource('mapel', MapelController::class);
+    // ---- Kalender 
+    Route::resource('rencana-pembelajaran', RencanaPembelajaranController::class);
+    
+    //--- Mapel ---//
+    Route::get('mapel', [MapelController::class, 'index'])->name('mapel.index');
+    Route::post('mapel', [MapelController::class, 'store'])->name('mapel.store');
+    Route::put('mapel/{mapel}', [MapelController::class, 'update'])->name('mapel.update');
+    Route::delete('mapel/{mapel}', [MapelController::class, 'destroy'])->name('mapel.destroy');
+    
+    //--- Guru Mapel (Pilih Mapel yang Diajar) ---//
+    Route::get('guru-mapel', [GuruMapelController::class, 'index'])->name('guru-mapel.index');
+    Route::post('guru-mapel', [GuruMapelController::class, 'store'])->name('guru-mapel.store');
+    Route::delete('guru-mapel/{guruMapel}', [GuruMapelController::class, 'destroy'])->name('guru-mapel.destroy');
+    Route::get('guru-mapel/{guruMapel}/rekap', [GuruMapelController::class, 'rekap'])->name('guru-mapel.rekap');
 
     //---- Kelas ---//
        Route::get('kelas/{kelas}/siswa', [KelasController::class, 'getSiswa'])->name('kelas.siswa');
        Route::post('kelas/{kelas}/siswa', [KelasController::class, 'updateSiswa'])->name('kelas.siswa.update');
-      Route::resource('kelas', KelasController::class);
+      Route::resource('kelas', KelasController::class)->parameters(['kelas' => 'kelas']);
     
-    // ---- 🔹 ABSENSI ----
-    Route::get('absensi/santri/{guruMapel}', [AbsensiController::class, 'getSiswaList'])->name('absensi.santri-list');
-    Route::resource('absensi', AbsensiController::class)->only(['index', 'update']);
+      // --- Absensi Input Per Mapel ---
+      Route::get('absensi', [AbsensiController::class, 'index'])->name('absensi.index');
+      Route::get('absensi/{guruMapelId}/santri', [AbsensiController::class, 'getSantriByMapel'])->name('absensi.getSantri');
+      Route::post('absensi/store', [AbsensiController::class, 'store'])->name('absensi.store');
 
-    // ---- 🔹 PENILAIAN ----
-    Route::post('penilaian/upload', [PenilaianController::class, 'uploadAndProcessPdf'])->name('penilaian.upload');
-    Route::resource('penilaian', PenilaianController::class) ->only(['index', 'store', 'update', 'destroy']);
-=======
-    Route::middleware("auth:guru")->prefix("guru")->group(function () {
-        Route::get("/dashboard", [DashboardController::class, "index"])->name("guru.dashboard")->defaults("guard", "guru");
-        Route::get("/santri", [DashboardController::class, "guruSantri"])->name("guru.santri");
-        Route::get("/wali", [DashboardController::class, "guruWali"])->name("guru.wali");
-        Route::resource("", GuruController::class)->names('guru')->except(["show", "create", "edit"]);
+    // --- Rekap Kehadiran ---
+      Route::get('rekap-kehadiran', [AbsensiController::class, 'rekap'])->name('rekap-kehadiran.index');
+      Route::get('rekap-kehadiran/data', [AbsensiController::class, 'getRekapData'])->name('rekap-kehadiran.getData');
 
+    Route::get('penilaian/{guruMapelId}/santri', [PenilaianController::class, 'getSantriByMapel'])->name('penilaian.getSantri');
+    Route::get('rekap-penilaian', [PenilaianController::class, 'rekap'])->name('rekap-penilaian.index');
+    Route::get('rekap-penilaian/data', [PenilaianController::class, 'getRekapData'])->name('rekap-penilaian.getData');
+    Route::resource('penilaian', PenilaianController::class);
 
-
-    // Akademik routes (penilaian, absensi, mapel)
-    Route::prefix("akademik")->name("akademik.")->group(function () {
-        // Mapel routes
-        Route::resource("mapel", MapelController::class)->except(["show", "create", "edit"]);
-
-        // Absensi routes
-        Route::resource("absensi", AbsensiController::class)->only(["index", "store", "update"]);
-        Route::get("absensi/santri/{guruMapel}", [AbsensiController::class, "getSiswaList"])
-            ->name("absensi.santri-list");
-
-        // Penilaian routes dengan custom upload
-        Route::resource("penilaian", PenilaianController::class)
-            ->only(["index", "store", "update", "destroy"]);
-        Route::post("penilaian/upload", [PenilaianController::class, "uploadAndProcessPdf"])
-            ->name("penilaian.upload");
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
+    // --- Kelas Saya (Guru) ---
+    Route::get('kelas-saya', [GuruAkademikController::class, 'kelasSaya'])->name('kelas-saya.index');
     });
-
-<<<<<<< HEAD
-// ======================================
-// 👤 USER MANAGEMENT (Admin)
-// ======================================
-Route::middleware('auth:web')->group(function () {
-    Route::resource('santri', SantriController::class);
-    Route::resource('wali', WaliController::class);
-    Route::resource('user', UserController::class);
-});
-=======
-Route::middleware("auth:santri")->prefix("santri")->group(function () {
-    Route::get("/dashboard", [DashboardController::class, "index"])->name("santri.dashboard")->defaults("guard", "santri");
-});
-
-Route::middleware("auth:wali")->prefix("wali")->group(function () {
-    Route::get("/dashboard", [DashboardController::class, "index"])->name("wali.dashboard")->defaults("guard", "wali");
-});
-
-// User management routes - admin only
-Route::middleware("auth:web")->group(function () {
-    Route::resource("santri", SantriController::class);
-    Route::resource("wali", WaliController::class);
-    Route::resource("user", UserController::class);
-});
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6

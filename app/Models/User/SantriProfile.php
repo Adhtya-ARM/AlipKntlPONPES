@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 use App\Models\User\Santri;
-use App\Models\Akademik\Penilaian;
+use App\Models\Akademik\PenilaianDetail;
 use App\Models\User\SantriKelas;
+use App\Models\User\WaliProfile;
+
 use App\Models\Akademik\Kelas;
 use App\Models\Akademik\GuruMapel;
 
@@ -20,10 +22,9 @@ class SantriProfile extends Model
     protected $fillable = [
         "santri_id",
         "nama",
-        "asrama",
+        "no_hp",
+        "wali_profile_id",
         "alamat",
-        "wali",
-        "kamar",
         "status",
     ];
 
@@ -44,8 +45,7 @@ class SantriProfile extends Model
 
     public function santriKelas()
     {
-        // Relasi Many-to-Many ke Kelas melalui tabel pivot santri_kelas
-        return $this->HasMany(SantriKelas::class, "santri_profile_id");
+        return $this->HasOne(SantriKelas::class, "santri_profile_id");
     }
     
     public function kelasAktif()
@@ -57,4 +57,20 @@ class SantriProfile extends Model
        {
            return $this->BelongsTo(Kelas::class, 'kelas_id');
        }
+       
+       public function waliProfile()
+          {
+              return $this->BelongsTo(WaliProfile::class, 'wali_profile_id');
+          }
+       
+       public function penilaians()
+       {
+           return $this->hasMany(\App\Models\Akademik\Penilaian::class, 'santri_profile_id');
+       }
+       
+       public function absensis()
+       {
+           return $this->hasMany(\App\Models\Akademik\Absensi::class, 'santri_profile_id');
+       }
+       
 }

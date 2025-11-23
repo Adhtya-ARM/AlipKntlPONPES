@@ -30,64 +30,44 @@ class GuruMapel extends Model
         'tahun_ajaran',
     ];
 
-<<<<<<< HEAD
-    public function mapel(): BelongsTo
+    public function mapel()
     {
         return $this->belongsTo(Mapel::class);
     }
 
-    public function kelas(): BelongsTo
+    public function kelas()
     {
         return $this->belongsTo(Kelas::class, 'kelas_id');
     }
 
-    public function rencanaPembelajaran(): HasOne
-    {
-        return $this->hasOne(RencanaPembelajaran::class, 'guru_mapel_id');
-    }
+    // Removed rencanaPembelajaran relationship - rencana_pembelajaran table doesn't have guru_mapel_id column
+    // Removed absensiHeaders relationship - AbsensiHeader model deleted
 
-    public function absensiHeaders(): HasMany
-    {
-        return $this->hasMany(AbsensiHeader::class, 'guru_mapel_id');
-    }
-
-    public function penilaians(): HasMany
+    public function penilaians()
     {
         return $this->hasMany(Penilaian::class, 'guru_mapel_id');
     }
 
-    public function santriMapel(): HasMany
+    public function santriMapel()
     {
-        return $this->hasMany(\App\Models\Akademik\SantriMapel::class, 'guru_mapel_id');
+        return $this->hasMany(SantriMapel::class, 'guru_mapel_id');
     }
-}
-=======
-    // Karena ini adalah tabel pivot, secara default ia tidak memiliki timestamps.
-    // Jika tabel Anda memiliki kolom created_at dan updated_at, atur ini menjadi true.
-    public $timestamps = false; // Ubah menjadi true jika tabel Anda memiliki timestamps
+
+    // Tabel ini memiliki timestamps sesuai migration
+    public $timestamps = true;
 
     /**
      * Relasi ke Absensi
      */
     public function absensi()
     {
-        return $this->hasMany(\App\Models\Akademik\Absensi::class, 'guru_profile_id', 'guru_profile_id')
+        return $this->hasMany(Absensi::class, 'guru_profile_id', 'guru_profile_id')
                     ->whereColumn('mapel_id', 'guru_mapel.mapel_id');
     }
-
-    // Relasi (Relationships)
-
-    /**
-     * Relasi ke GuruProfile (Banyak GuruMapel dimiliki oleh satu GuruProfile).
-     */
-     public function mapel()
-     {
-         return $this->belongsTo(Mapel::class, 'mapel_id');
-     }
      
      public function guruProfile()
      {
          return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
      }
 }
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
+

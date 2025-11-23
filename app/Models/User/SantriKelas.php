@@ -17,7 +17,7 @@ class SantriKelas extends Model
 
     public function santriProfile()
     {
-        return $this->BelongsTo(santriProfile::class, "santri_profile_id");
+        return $this->BelongsTo(SantriProfile::class, "santri_profile_id");
     }
 
     public function kelas()

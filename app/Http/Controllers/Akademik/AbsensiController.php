@@ -5,260 +5,222 @@ namespace App\Http\Controllers\Akademik;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\GuruProfile;
-use App\Models\SantriProfile;
+use Carbon\Carbon;
 use App\Models\Akademik\GuruMapel;
-use App\Models\Akademik\RencanaPertemuan; 
+use App\Models\Akademik\Kelas;
+use App\Models\Akademik\Absensi;
+use App\Models\User\SantriProfile;
 
 class AbsensiController extends Controller
 {
-    // ---
-    // FUNGSI UTAMA (GURU & SANTRI)
-    // ---
+    /**
+     * Display input absensi page for guru
+     */
     public function index()
     {
-        $user = auth()->user();
         $guard = $this->getGuardName();
 
-        if ($guard === 'guru') {
-            $guruProfile = $user->guruProfile;
-            if (!$guruProfile) {
-                return redirect()->back()->with('error', 'Profile guru tidak ditemukan');
-            }
-
-<<<<<<< HEAD
-            // Eager load relasi baru: mapel, kelas, dan rencanaPembelajaran
-            $guruMapels = GuruMapel::with(['mapel', 'kelas', 'rencanaPembelajaran']) 
-=======
-            $guruMapels = GuruMapel::with(['mapel'])
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
-                ->where('guru_profile_id', $guruProfile->id)
-                ->get();
-
-            // Ubah view jika perlu
-            return view('absensi.index', compact('guruMapels'));
+        if ($guard !== 'guru') {
+            return back()->with('error', 'Unauthorized. Hanya guru yang bisa akses halaman ini.');
         }
 
-        // Jika santri yang login
-        if ($guard === 'santri') {
-            $santriProfile = $user->santriProfile;
-            if (!$santriProfile) {
-                return redirect()->back()->with('error', 'Profile santri tidak ditemukan');
-            }
-
-            // Gunakan Query Builder untuk rekap absensi santri
-            $rekapAbsensi = DB::table('absensi_detail AS ad')
-                ->select(
-                    'ad.status_kehadiran',
-                    DB::raw('COUNT(*) as total'),
-                    'm.nama_mapel',
-                    'm.id as mapel_id'
-                )
-                ->join('absensi_header AS ah', 'ad.absensi_header_id', '=', 'ah.id')
-                ->join('rencana_pembelajaran AS rp', 'ah.rencana_pembelajaran_id', '=', 'rp.id')
-                ->join('guru_mapel AS gm', 'rp.guru_mapel_id', '=', 'gm.id')
-                ->join('mapel AS m', 'gm.mapel_id', '=', 'm.id')
-                ->where('ad.santri_id', $santriProfile->id)
-                ->groupBy('ad.status_kehadiran', 'm.nama_mapel', 'm.id')
-                ->get()
-                ->groupBy('nama_mapel'); // Grouping untuk tampilan di view santri
-
-            // Ganti variabel absensis dengan rekapAbsensi
-            return view('absensi.santri-index', compact('rekapAbsensi')); 
+        $user = auth('guru')->user();
+        if (!$user) {
+            return redirect()->route('login')->with('error', 'Silakan login sebagai guru terlebih dahulu.');
         }
 
-        return redirect()->back()->with('error', 'Unauthorized');
+        $guruProfile = $user->guruProfile;
+        if (!$guruProfile) {
+            return back()->with('error', 'Profil guru tidak ditemukan.');
+        }
+
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level,nama_unik'])
+            ->where('guru_profile_id', $guruProfile->id)
+            ->get();
+
+        return view('Akademik.Absensi.input', compact('guruMapels'));
     }
 
+    /**
+     * Get list of santri for a specific mapel/kelas
+     */
+    public function getSantriByMapel($guruMapelId)
+    {
+        $guruMapel = GuruMapel::with('kelas.santriProfile')->findOrFail($guruMapelId);
+
+        $santriList = $guruMapel->kelas?->santriProfile()
+            ->select('santri_profile.id', 'santri_profile.nama', 'santris.nisn')
+            ->join('santris', 'santri_profile.santri_id', '=', 'santris.id')
+            ->where('santri_profile.status', 'aktif')
+            ->orderBy('santri_profile.nama')
+            ->get() ?? collect([]);
+
+        return response()->json([
+            'santri' => $santriList,
+            'jumlahSantri' => $santriList->count(),
+        ]);
+    }
+
+    /**
+     * Store or update absensi
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'guru_mapel_id' => 'required|exists:guru_mapel,id',
+            'tanggal_absensi' => 'required|date',
+            'absensi' => 'required|array',
+            'absensi.*.id' => 'required|exists:santri_profile,id',
+            'absensi.*.kehadiran' => 'required|string|in:H,I,S,A',
+        ]);
+
+        $guruMapel = GuruMapel::findOrFail($validated['guru_mapel_id']);
+        $tanggal = $validated['tanggal_absensi'];
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($validated['absensi'] as $abs) {
+                // Map kehadiran to status
+                // Status is already in correct format (H, S, I, A)
+                $status = $abs['kehadiran'];
+
+                Absensi::updateOrCreate(
+                    [
+                        'santri_profile_id' => $abs['id'],
+                        'tanggal' => $tanggal,
+                        'mapel_id' => $guruMapel->mapel_id, // Add mapel_id to condition
+                    ],
+                    [
+                        'kelas_id' => $guruMapel->kelas_id,
+                        'status' => $status,
+                        'keterangan' => null,
+                    ]
+                );
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Absensi berhasil disimpan.',
+                'tanggal' => $tanggal,
+                'jumlah_santri' => count($validated['absensi'])
+            ]);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'message' => 'Gagal menyimpan absensi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get guard name
+     */
     private function getGuardName()
     {
-        // Fungsi ini tidak berubah
-        foreach (['web', 'guru', 'santri', 'wali'] as $guard) {
-            if (auth()->guard($guard)->check()) {
-                return $guard;
-            }
+        foreach (['guru', 'santri', 'wali', 'web'] as $guard) {
+            if (auth()->guard($guard)->check()) return $guard;
         }
         return null;
     }
 
-    // ---
-    // FUNGSI UNTUK MENGISI ABSENSI (GURU)
-    // ---
-
     /**
-     * Mengambil daftar santri, rekap absensi, dan max pertemuan.
+     * Display rekap kehadiran page
      */
-    public function getSiswaList($guruMapelId)
+    public function rekap(Request $request)
     {
-        $guruMapel = GuruMapel::findOrFail($guruMapelId);
-        $kelasId = $guruMapel->kelas_id; // Menggunakan kelas_id dari GuruMapel
+        $guard = $this->getGuardName();
+
+        if ($guard !== 'guru') {
+            return back()->with('error', 'Unauthorized. Hanya guru yang bisa akses halaman ini.');
+        }
+
+        $user = auth('guru')->user();
+        $guruProfile = $user->guruProfile;
         
-        // 1. Ambil Rencana Pembelajaran (setup awal)
-        $rencana = RencanaPembelajaran::firstOrCreate(
-            ['guru_mapel_id' => $guruMapelId],
-            [
-                'jumlah_pertemuan' => 16, // Nilai default
-                'jumlah_bab' => 8 // Nilai default
-            ]
-        );
+        $jabatan = strtolower($guruProfile->jabatan ?? '');
+        $isWakaOrKepsek = in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka']);
 
-        // 2. Ambil ID Santri dari kelas yang diampu (Gunakan santri_kelas)
-        $santriInClassIds = DB::table('santri_kelas')
-            ->where('kelas_id', $kelasId)
-            ->pluck('santri_profile_id');
-            
-        // 3. Ambil Rekap Absensi (Query Builder dengan JOIN)
-        $rekapAbsensi = DB::table('absensi_detail AS ad')
-            ->select(
-                'ad.santri_id',
-                'ad.status_kehadiran',
-                DB::raw('COUNT(*) as total')
-            )
-            ->join('absensi_header AS ah', 'ad.absensi_header_id', '=', 'ah.id')
-            ->join('rencana_pembelajaran AS rp', 'ah.rencana_pembelajaran_id', '=', 'rp.id')
-            ->where('rp.guru_mapel_id', $guruMapelId) 
-            ->whereIn('ad.santri_id', $santriInClassIds)
-            ->groupBy('ad.santri_id', 'ad.status_kehadiran')
-            ->get()
-            ->keyBy(function($item) {
-                return $item->santri_id . '_' . $item->status_kehadiran;
-            });
+        if ($isWakaOrKepsek) {
+            // Waka/Kepsek bisa melihat semua kelas
+            $kelasList = Kelas::orderBy('level')->get();
+        } else {
+            // Guru biasa hanya melihat kelas yang diajar
+            $kelasList = Kelas::whereHas('guruMapels', function($q) use ($guruProfile) {
+                $q->where('guru_profile_id', $guruProfile->id);
+            })->orderBy('level')->get();
+        }
 
-        // 4. Ambil Nama Santri dan Gabungkan Rekap
-        $santriList = SantriProfile::whereIn('id', $santriInClassIds)
-            ->select('id', 'nama')
-            ->get()
-            ->map(function($santri) use ($rekapAbsensi) {
-                $alphaKey = $santri->id . '_alpha';
-                $totalAlpha = $rekapAbsensi->has($alphaKey) ? $rekapAbsensi->get($alphaKey)->total : 0;
-
-                return [
-                    'id' => $santri->id,
-                    'nama' => $santri->nama,
-                    // 'status_awal' adalah status default di form
-                    'status_awal' => $totalAlpha >= 7 ? 'X' : 'hadir', 
-                    'total_alpha' => $totalAlpha,
-                    'keterangan' => ''
-                ];
-            });
-
-<<<<<<< HEAD
-        return response()->json([
-            'santri' => $santriList,
-            'maxPertemuan' => $rencana->jumlah_pertemuan
-=======
-        // Get max pertemuan from existing absensi records
-        $maxPertemuan = Absensi::where('mapel_id', $guruMapel->mapel_id)
-            ->where('guru_profile_id', $guruMapel->guru_profile_id)
-            ->max('pertemuan_ke') ?? 16; // Default to 16 if no records
-
-        return response()->json([
-            'santri' => $santriList,
-            'maxPertemuan' => $maxPertemuan
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
-        ]);
+        return view('Akademik.Absensi.rekap', compact('kelasList'));
     }
 
     /**
-     * Menyimpan data absensi ke AbsensiHeader dan AbsensiDetail.
+     * Get rekap data via AJAX
      */
-    public function store(Request $request)
+    public function getRekapData(Request $request)
     {
-        $request->validate([
-            'guru_mapel_id' => 'required|exists:guru_mapel,id',
-            'pertemuan_ke' => 'required|integer|min:1',
-            'tanggal_absensi' => 'required|date', // Tambahkan validasi tanggal
-            'absensi' => 'required|array',
-            'absensi.*.id' => 'required|exists:santri_profile,id',
-            // Ganti 'status' menjadi 'status_kehadiran'
-            'absensi.*.status_kehadiran' => 'required|in:hadir,sakit,izin,alpha,X', 
-            'absensi.*.catatan' => 'nullable|string' // Ganti 'keterangan' menjadi 'catatan'
-        ]);
+        $kelasId = $request->kelas_id;
+        $bulan = $request->bulan; // Format: YYYY-MM
 
-        $guruMapelId = $request->guru_mapel_id;
-        
-        // 1. Cari Rencana Pembelajaran ID
-        $rencana = RencanaPembelajaran::where('guru_mapel_id', $guruMapelId)->firstOrFail();
+        if (!$kelasId || !$bulan) {
+            return response()->json(['students' => []]);
+        }
 
-        // 2. Buat record di AbsensiHeader (Query Builder updateOrInsert)
-        DB::table('absensi_header')->updateOrInsert(
-            [
-                'rencana_pembelajaran_id' => $rencana->id,
-                'pertemuan_ke' => $request->pertemuan_ke,
-            ],
-            [
-                'tanggal_absensi' => $request->tanggal_absensi,
-                'updated_at' => now(), 
-            ]
-        );
+        // Get students in the class
+        $kelas = Kelas::with('santriProfile')->findOrFail($kelasId);
+        $santriList = $kelas->santriProfile()
+            ->select('santri_profile.id', 'santri_profile.nama', 'santris.nisn')
+            ->join('santris', 'santri_profile.santri_id', '=', 'santris.id')
+            ->where('santri_profile.status', 'aktif')
+            ->orderBy('santri_profile.nama')
+            ->get();
 
-        // Dapatkan ID AbsensiHeader yang baru/di-update
-        $absensiHeader = DB::table('absensi_header')
-                           ->where('rencana_pembelajaran_id', $rencana->id)
-                           ->where('pertemuan_ke', $request->pertemuan_ke)
-                           ->first();
-        $absensiHeaderId = $absensiHeader->id;
+        // Get date range
+        [$year, $month] = explode('-', $bulan);
+        $startDate = "{$year}-{$month}-01";
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $endDate = "{$year}-{$month}-{$daysInMonth}";
 
+        // Get attendance data
+        $students = [];
+        foreach ($santriList as $santri) {
+            $attendanceRecords = Absensi::where('santri_profile_id', $santri->id)
+                ->whereBetween('tanggal', [$startDate, $endDate])
+                ->get()
+                ->keyBy(function($item) {
+                    return (int) date('j', strtotime($item->tanggal)); // Day of month
+                });
 
-        $absensiDetailData = [];
-        foreach ($request->absensi as $data) {
-            $absensiDetailData[] = [
-                'absensi_header_id' => $absensiHeaderId, 
-                'santri_id' => $data['id'],
-                'status_kehadiran' => $data['status_kehadiran'] === 'X' ? 'alpha' : $data['status_kehadiran'], 
-                'catatan' => $data['catatan'] ?? null,
-                'created_at' => now(),
-                'updated_at' => now(),
+            // Build attendance array (1-31)
+            $attendance = [];
+            $summary = ['H' => 0, 'S' => 0, 'I' => 0, 'A' => 0, 'D' => 0, 'T' => 0];
+            
+            for ($day = 1; $day <= $daysInMonth; $day++) {
+                if (isset($attendanceRecords[$day])) {
+                    $status = $attendanceRecords[$day]->status;
+                    $attendance[$day] = $status;
+                    $summary[$status] = ($summary[$status] ?? 0) + 1;
+                } else {
+                    $attendance[$day] = null;
+                }
+            }
+
+            // Calculate percentage
+            $totalHadir = $summary['H'];
+            $totalDays = $daysInMonth;
+            $persentase = $totalDays > 0 ? round(($totalHadir / $totalDays) * 100, 1) : 0;
+
+            $students[] = [
+                'id' => $santri->id,
+                'nama' => $santri->nama,
+                'nisn' => $santri->nisn,
+                'attendance' => $attendance,
+                'summary' => $summary,
+                'persentase' => $persentase
             ];
         }
-        
-        // 3. Simpan massal ke AbsensiDetail (Query Builder upsert)
-        DB::table('absensi_detail')->upsert(
-            $absensiDetailData, 
-            ['absensi_header_id', 'santri_id'], 
-            ['status_kehadiran', 'catatan', 'updated_at']
-        );
 
-        return response()->json(['message' => 'Absensi berhasil disimpan']);
-    }
-
-    // ---
-    // FUNGSI UNTUK MENGELOLA RENCANA PEMBELAJARAN (Mengganti 'update' lama)
-    // ---
-    
-    /**
-     * Mengubah data Rencana Pembelajaran (jumlah pertemuan/bab).
-     * ID yang diterima adalah guruMapelId.
-     */
-    public function updateRencana(Request $request, $guruMapelId)
-    {
-        // Validasi data Rencana Pembelajaran
-        $data = $request->validate([
-            'jumlah_pertemuan' => 'required|integer|min:0',
-            'jumlah_bab' => 'required|integer|min:0',
-            'keterangan' => 'nullable|string'
-        ]);
-        
-        // Cari Rencana berdasarkan guruMapelId
-        $rencana = RencanaPembelajaran::where('guru_mapel_id', $guruMapelId)->firstOrFail();
-        
-        $rencana->update($data);
-
-        if ($request->wantsJson()) {
-            return response()->json(['data' => $rencana]);
-        }
-
-        return redirect()->back()->with('success', 'Rencana Pembelajaran berhasil diperbarui.');
-    }
-
-    /**
-     * HAPUS FUNGSI DESTROY LAMA karena tidak lagi relevan
-     * Anda dapat membuat fungsi destroy terpisah untuk AbsensiDetail jika diperlukan.
-     */
-    public function destroy(Request $request, $id)
-    {
-        // Tidak ada perubahan karena fungsi destroy ini mengacu pada ID Absensi lama.
-        // Sebaiknya ganti ini menjadi fungsi untuk menghapus AbsensiHeader jika memang dibutuhkan.
-        return redirect()->back()->with('error', 'Fungsi hapus absensi tidak diimplementasikan.');
+        return response()->json(['students' => $students]);
     }
 }

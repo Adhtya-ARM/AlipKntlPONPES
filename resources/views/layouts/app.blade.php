@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="icon" href="{{ asset('gambar/logo.png') }}" type="image/png">
     <title>{{ config('app.name', 'Laravel App') }}</title>
@@ -36,7 +37,7 @@
     </style>
 </head>
 <body class="bg-gray-100 font-sans antialiased">
-    <script src="//unpkg.com/alpinejs" defer></script>
+
     @php
         // Daftar nama rute yang TIDAK boleh menampilkan sidebar
         // Halaman login, register, landing page, dll.
@@ -73,5 +74,26 @@
         </div>
     </div>
 
+    @if(session('success'))
+        <script>
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil',
+                text: '{{ session('success') }}',
+                timer: 3000,
+                showConfirmButton: false
+            });
+        </script>
+    @endif
+
+    @if(session('error'))
+        <script>
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal',
+                text: '{{ session('error') }}',
+            });
+        </script>
+    @endif
 </body>
 </html>

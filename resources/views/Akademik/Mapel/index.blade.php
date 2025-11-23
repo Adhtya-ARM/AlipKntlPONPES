@@ -1,210 +1,395 @@
 @extends('layouts.app')
 
-@section('title', 'Manajemen Mata Pelajaran Ajar Saya')
+@section('title', 'Pengaturan Mata Pelajaran')
 
 @section('content')
-<div x-data="mapelCrud()" class="container mx-auto p-6">
-
+<div x-data="mapelData()" class="container mx-auto p-6">
+    
     {{-- HEADER --}}
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-gray-800">Manajemen Mata Pelajaran Ajar Saya</h1>
-        <button @click="openCreate()" 
-            class="bg-blue-600 text-white p-3 rounded-lg shadow hover:bg-blue-700 transition"
-            title="Tambah Mapel">
-            <i class="fas fa-plus"></i>
-        </button>
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-800">Pengaturan Mata Pelajaran (TA: 2025/2026)</h1>
+        <p class="text-sm text-gray-500 mt-1">
+            <i class="fas fa-arrow-left mr-1"></i> Kembali ke Daftar Kelas
+        </p>
     </div>
 
-    {{-- SEARCH + FILTER --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div class="relative w-full sm:w-1/2">
-            <input type="text" x-model="search" placeholder="Cari nama mapel..." 
-                class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-            <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-        </div>
-
-        <select x-model="filterKelas" 
-            class="border border-gray-300 py-2 px-3 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="">Semua Kelas</option>
-            @foreach ($kelas as $k)
-                <option value="{{ $k->id }}">{{ $k->nama_kelas }}</option>
-            @endforeach
-        </select>
-    </div>
-
-    {{-- TABLE --}}
-    <div class="bg-white shadow rounded-xl overflow-hidden">
-        <table class="min-w-full">
-            <thead class="bg-indigo-700 text-white">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase">No</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase">Mapel</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase">Kelas</th>
-                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase">Jumlah Siswa</th>
-                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase">Pertemuan</th>
-                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase">Bab</th>
-                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase">Aksi</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-                <template x-for="(item, index) in filteredData()" :key="item.id">
-                    <tr class="hover:bg-gray-50 transition">
-                        <td class="px-6 py-3 text-sm text-gray-600" x-text="index + 1"></td>
-                        <td class="px-6 py-3 font-semibold text-gray-900" x-text="item.mapel.nama_mapel"></td>
-                        <td class="px-6 py-3 text-indigo-600 text-sm" x-text="item.kelas.nama_kelas"></td>
-                        <td class="px-6 py-3 text-center font-semibold text-gray-800" x-text="item.santri_mapel_count ?? 0"></td>
-                        <td class="px-6 py-3 text-center text-gray-700" x-text="item.rencana_pembelajaran?.jumlah_pertemuan ?? 0"></td>
-                        <td class="px-6 py-3 text-center font-bold text-gray-800" x-text="item.rencana_pembelajaran?.jumlah_bab ?? 0"></td>
-                        <td class="px-6 py-3 text-center space-x-2">
-
-                            <button @click="openRencana(item)" 
-                                class="text-green-600 hover:text-green-800" title="Rencana Pembelajaran">
-                                <i class="fas fa-cog"></i>
-                            </button>
-
-                            <button @click="openEdit(item)" 
-                                class="text-blue-600 hover:text-blue-800" title="Edit Mapel">
-                                <i class="fas fa-edit"></i>
-                            </button>
-
-                            <button @click="deleteMapel(item.mapel.id)" 
-                                class="text-red-600 hover:text-red-800" title="Hapus Mapel">
-                                <i class="fas fa-trash"></i>
-                            </button>
-
-                            <button @click="openSiswa(item)" 
-                                class="text-indigo-600 hover:text-indigo-800" title="Daftar Siswa">
-                                <i class="fas fa-users"></i>
-                            </button>
-                        </td>
-                    </tr>
-                </template>
-
-                <tr x-show="filteredData().length === 0">
-                    <td colspan="7" class="text-center text-gray-400 py-6">Tidak ada data ditemukan.</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    {{-- MODAL TAMBAH/EDIT --}}
-    <template x-if="showModal">
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40" @click.self="closeModal()">
-            <div class="bg-white rounded-xl w-full max-w-md shadow-xl p-6 space-y-4">
-                <h2 class="text-lg font-bold text-gray-800" x-text="modalTitle"></h2>
-
-                <div>
-                    <label class="text-sm text-gray-600">Nama Mapel</label>
-                    <input type="text" x-model="form.nama_mapel" class="w-full border-gray-300 rounded-lg mt-1 p-2" required>
-                </div>
-                <div>
-                    <label class="text-sm text-gray-600">Kelas</label>
-                    <select x-model="form.kelas_id" class="w-full border-gray-300 rounded-lg mt-1 p-2" required>
-                        <option value="">Pilih Kelas</option>
-                        @foreach ($kelas as $k)
-                            <option value="{{ $k->id }}">{{ $k->nama_kelas }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-sm text-gray-600">Tahun Ajaran</label>
-                        <input type="text" x-model="form.tahun_ajaran" class="w-full border-gray-300 rounded-lg mt-1 p-2">
-                    </div>
-                    <div>
-                        <label class="text-sm text-gray-600">Semester</label>
-                        <select x-model="form.semester" class="w-full border-gray-300 rounded-lg mt-1 p-2">
-                            <option value="Ganjil">Ganjil</option>
-                            <option value="Genap">Genap</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="flex justify-end space-x-2 pt-3">
-                    <button @click="closeModal()" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">Batal</button>
-                    <button @click="saveMapel()" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Simpan</button>
-                </div>
-            </div>
-        </div>
-    </template>
-
-    {{-- MODAL RENCANA --}}
-    <template x-if="showRencanaModal">
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40" @click.self="closeRencanaModal()">
-            <div class="bg-white rounded-xl w-full max-w-md shadow-xl p-6 space-y-4">
-                <div class="flex justify-between items-center mb-3 border-b pb-2">
-                    <h2 class="text-lg font-bold text-green-700" x-text="'Rencana - ' + rencanaTitle"></h2>
-                    <button @click="closeRencanaModal()" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button>
-                </div>
-
-                <div>
-                    <label class="text-sm text-gray-600">Jumlah Pertemuan</label>
-                    <input type="number" x-model="rencana.jumlah_pertemuan" min="0" class="w-full border-gray-300 rounded-lg mt-1 p-2">
-                </div>
-
-                <div>
-                    <label class="text-sm text-gray-600">Jumlah Bab</label>
-                    <input type="number" x-model="rencana.jumlah_bab" min="0" class="w-full border-gray-300 rounded-lg mt-1 p-2">
-                </div>
-
-                <div class="flex justify-end space-x-3 pt-3">
-                    <button @click="closeRencanaModal()" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">Batal</button>
-                    <button @click="saveRencana()" class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">Simpan</button>
-                </div>
-            </div>
-        </div>
-    </template>
-
-    {{-- MODAL DAFTAR SISWA --}}
-    <template x-if="showSiswaModal">
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40" @click.self="closeSiswaModal()">
-            <div class="bg-white rounded-xl w-full max-w-2xl shadow-xl p-6">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="font-bold text-xl text-indigo-700" x-text="'Daftar Siswa - ' + (siswaModalTitle || '')"></h2>
-                    <button @click="closeSiswaModal()" class="text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times"></i>
+    {{-- KELOMPOK MAPEL SMP (7, 8, 9) --}}
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-700 mb-4">Kelompok Mapel SMP</h2>
+        
+        <template x-for="(kelompok, kIndex) in kelompokMapels.filter(k => k.jenis === 'smp')" :key="kelompok.id">
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-semibold text-gray-600" x-text="kelompok.nama"></h3>
+                    <button @click="deleteKelompok(kelompok.id)" 
+                        class="text-red-500 hover:text-red-700 text-sm">
+                        <i class="fas fa-minus-circle"></i>
                     </button>
                 </div>
 
-                <div class="flex items-center justify-between mb-3">
-                    <div class="text-gray-600 text-sm font-medium">
-                        <input type="checkbox" @change="toggleAll($event)" class="mr-2"> Centang Semua
-                    </div>
-                    <div class="text-xs text-gray-500" x-text="'Total: ' + daftarSiswa.length + ' siswa'"></div>
-                </div>
-
-                <div class="overflow-x-auto max-h-[60vh]">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-2 text-left text-sm font-semibold text-gray-600">No</th>
-                                <th class="px-6 py-2 text-left text-sm font-semibold text-gray-600">Nama</th>
-                                <th class="px-6 py-2 text-center text-sm font-semibold text-gray-600">Ikut</th>
+                <table class="min-w-full border">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">#</th>
+                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">Nama Mapel</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">JJM</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">Target Tingkat</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(mapel, mIndex) in kelompok.mapels" :key="mapel.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 text-sm text-gray-600 border" x-text="mIndex + 1"></td>
+                                <td class="px-4 py-2 border">
+                                    <input type="text" 
+                                        x-model="mapel.nama_mapel"
+                                        @blur="updateMapel(mapel)"
+                                        class="w-full border-gray-300 rounded px-2 py-1 text-sm">
+                                </td>
+                                <td class="px-4 py-2 text-center border">
+                                    <input type="number" 
+                                        x-model="mapel.jjm"
+                                        @blur="updateMapel(mapel)"
+                                        min="0"
+                                        class="w-20 border-gray-300 rounded px-2 py-1 text-sm text-center">
+                                </td>
+                                <td class="px-4 py-2 border">
+                                    <div class="flex items-center justify-center space-x-3">
+                                        <template x-for="tingkat in ['7', '8', '9']" :key="tingkat">
+                                            <label class="flex items-center space-x-1 text-sm">
+                                                <input type="checkbox" 
+                                                    :checked="mapel.tingkat && mapel.tingkat.includes(tingkat)"
+                                                    @change="toggleTingkat(mapel, tingkat, $event.target.checked)"
+                                                    class="w-4 h-4 text-purple-600 border-gray-300 rounded">
+                                                <span class="bg-purple-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2 text-center border">
+                                    <button @click="deleteMapel(mapel.id)" 
+                                        class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template x-for="(s, i) in daftarSiswa" :key="s.id">
-                                <tr>
-                                    <td class="px-6 py-2 text-sm text-gray-500" x-text="i + 1"></td>
-                                    <td class="px-6 py-2 text-gray-800" x-text="s.nama"></td>
-                                    <td class="px-6 py-2 text-center">
-                                        <input type="checkbox" x-model="selectedSantri" :value="s.id" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                                    </td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
+                        </template>
+
+                        {{-- FORM TAMBAH MAPEL BARU --}}
+                        <tr class="bg-gray-50">
+                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border">
+                                <input type="text" 
+                                    x-model="newMapel[kelompok.id].nama_mapel"
+                                    placeholder="Nama mapel baru"
+                                    class="w-full border-gray-300 rounded px-2 py-1 text-sm">
+                            </td>
+                            <td class="px-4 py-2 text-center border">
+                                <input type="number" 
+                                    x-model="newMapel[kelompok.id].jjm"
+                                    placeholder="0"
+                                    min="0"
+                                    class="w-20 border-gray-300 rounded px-2 py-1 text-sm text-center">
+                            </td>
+                            <td class="px-4 py-2 border">
+                                <div class="flex items-center justify-center space-x-3">
+                                    <template x-for="tingkat in ['7', '8', '9']" :key="tingkat">
+                                        <label class="flex items-center space-x-1 text-sm">
+                                            <input type="checkbox" 
+                                                x-model="newMapel[kelompok.id].tingkat"
+                                                :value="tingkat"
+                                                class="w-4 h-4 text-purple-600 border-gray-300 rounded">
+                                            <span class="bg-purple-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2 text-center border">
+                                <button @click="addMapel(kelompok.id)" 
+                                    class="bg-purple-600 text-white px-4 py-1 rounded hover:bg-purple-700 text-sm">
+                                    Tambah
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+    </div>
+
+    {{-- KELOMPOK MAPEL SMA (10, 11, 12) --}}
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-bold text-gray-700 mb-4">Kelompok Mapel SMA</h2>
+        
+        <template x-for="(kelompok, kIndex) in kelompokMapels.filter(k => k.jenis === 'sma')" :key="kelompok.id">
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-semibold text-gray-600" x-text="kelompok.nama"></h3>
+                    <button @click="deleteKelompok(kelompok.id)" 
+                        class="text-red-500 hover:text-red-700 text-sm">
+                        <i class="fas fa-minus-circle"></i>
+                    </button>
                 </div>
 
-                <div class="flex justify-end space-x-3 mt-4 border-t pt-3">
-                    <button @click="closeSiswaModal()" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300">Batal</button>
-                    <button @click="saveSiswa()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Simpan</button>
-                </div>
+                <table class="min-w-full border">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">#</th>
+                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">Nama Mapel</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">JJM</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">Target Tingkat</th>
+                            <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="(mapel, mIndex) in kelompok.mapels" :key="mapel.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 text-sm text-gray-600 border" x-text="mIndex + 1"></td>
+                                <td class="px-4 py-2 border">
+                                    <input type="text" 
+                                        x-model="mapel.nama_mapel"
+                                        @blur="updateMapel(mapel)"
+                                        class="w-full border-gray-300 rounded px-2 py-1 text-sm">
+                                </td>
+                                <td class="px-4 py-2 text-center border">
+                                    <input type="number" 
+                                        x-model="mapel.jjm"
+                                        @blur="updateMapel(mapel)"
+                                        min="0"
+                                        class="w-20 border-gray-300 rounded px-2 py-1 text-sm text-center">
+                                </td>
+                                <td class="px-4 py-2 border">
+                                    <div class="flex items-center justify-center space-x-3">
+                                        <template x-for="tingkat in ['10', '11', '12']" :key="tingkat">
+                                            <label class="flex items-center space-x-1 text-sm">
+                                                <input type="checkbox" 
+                                                    :checked="mapel.tingkat && mapel.tingkat.includes(tingkat)"
+                                                    @change="toggleTingkat(mapel, tingkat, $event.target.checked)"
+                                                    class="w-4 h-4 text-blue-600 border-gray-300 rounded">
+                                                <span class="bg-blue-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2 text-center border">
+                                    <button @click="deleteMapel(mapel.id)" 
+                                        class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+
+                        {{-- FORM TAMBAH MAPEL BARU --}}
+                        <tr class="bg-gray-50">
+                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border">
+                                <input type="text" 
+                                    x-model="newMapel[kelompok.id].nama_mapel"
+                                    placeholder="Nama mapel baru"
+                                    class="w-full border-gray-300 rounded px-2 py-1 text-sm">
+                            </td>
+                            <td class="px-4 py-2 text-center border">
+                                <input type="number" 
+                                    x-model="newMapel[kelompok.id].jjm"
+                                    placeholder="0"
+                                    min="0"
+                                    class="w-20 border-gray-300 rounded px-2 py-1 text-sm text-center">
+                            </td>
+                            <td class="px-4 py-2 border">
+                                <div class="flex items-center justify-center space-x-3">
+                                    <template x-for="tingkat in ['10', '11', '12']" :key="tingkat">
+                                        <label class="flex items-center space-x-1 text-sm">
+                                            <input type="checkbox" 
+                                                x-model="newMapel[kelompok.id].tingkat"
+                                                :value="tingkat"
+                                                class="w-4 h-4 text-blue-600 border-gray-300 rounded">
+                                            <span class="bg-blue-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2 text-center border">
+                                <button @click="addMapel(kelompok.id)" 
+                                    class="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 text-sm">
+                                    Tambah
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-        </div>
-    </template>
+        </template>
+    </div>
 
 </div>
 
-@include('Akademik.Mapel.mapel-script')
+{{-- INLINE SCRIPT --}}
+<script>
+function mapelData() {
+    return {
+        kelompokMapels: @json($kelompokMapels),
+        newMapel: {},
+
+        init() {
+            this.kelompokMapels.forEach(kelompok => {
+                this.newMapel[kelompok.id] = {
+                    nama_mapel: '',
+                    jjm: 0,
+                    tingkat: []
+                };
+            });
+        },
+
+        addKelompok(jenis) {
+            const newKelompok = {
+                id: jenis + '_' + Date.now(),
+                nama: 'Kelompok ' + (jenis.toUpperCase()),
+                jenis: jenis,
+                mapels: []
+            };
+            
+            this.kelompokMapels.push(newKelompok);
+            this.newMapel[newKelompok.id] = {
+                nama_mapel: '',
+                jjm: 0,
+                tingkat: []
+            };
+        },
+
+        deleteKelompok(kelompokId) {
+            if (confirm('Apakah Anda yakin ingin menghapus kelompok ini?')) {
+                this.kelompokMapels = this.kelompokMapels.filter(k => k.id !== kelompokId);
+            }
+        },
+
+        async addMapel(kelompokId) {
+            const formData = this.newMapel[kelompokId];
+
+            if (!formData.nama_mapel) {
+                alert('Nama mapel harus diisi');
+                return;
+            }
+
+            try {
+                const response = await fetch('{{ route("akademik.mapel.store") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        nama_mapel: formData.nama_mapel,
+                        jjm: formData.jjm || 0,
+                        tingkat: formData.tingkat || []
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    const kelompok = this.kelompokMapels.find(k => k.id === kelompokId);
+                    if (kelompok) {
+                        kelompok.mapels.push(result.data);
+                    }
+
+                    this.newMapel[kelompokId] = {
+                        nama_mapel: '',
+                        jjm: 0,
+                        tingkat: []
+                    };
+
+                    alert(result.message);
+                } else {
+                    // Show detailed error
+                    if (result.errors) {
+                        let errorMsg = 'Validasi gagal:\n';
+                        for (let field in result.errors) {
+                            errorMsg += '- ' + result.errors[field].join(', ') + '\n';
+                        }
+                        alert(errorMsg);
+                    } else {
+                        alert(result.message || 'Gagal menambahkan mapel');
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan saat menambahkan mapel: ' + error.message);
+            }
+        },
+
+        async updateMapel(mapel) {
+            try {
+                const response = await fetch(`{{ url('akademik/mapel') }}/${mapel.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        nama_mapel: mapel.nama_mapel,
+                        jjm: mapel.jjm || 0,
+                        tingkat: mapel.tingkat || []
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.message || 'Gagal memperbarui mapel');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan saat memperbarui mapel');
+            }
+        },
+
+        async deleteMapel(mapelId) {
+            if (!confirm('Apakah Anda yakin ingin menghapus mapel ini?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`{{ url('akademik/mapel') }}/${mapelId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    this.kelompokMapels.forEach(kelompok => {
+                        kelompok.mapels = kelompok.mapels.filter(m => m.id !== mapelId);
+                    });
+                    alert(result.message);
+                } else {
+                    alert(result.message || 'Gagal menghapus mapel');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Terjadi kesalahan saat menghapus mapel');
+            }
+        },
+
+        toggleTingkat(mapel, tingkat, checked) {
+            if (!mapel.tingkat) {
+                mapel.tingkat = [];
+            }
+
+            if (checked) {
+                if (!mapel.tingkat.includes(tingkat)) {
+                    mapel.tingkat.push(tingkat);
+                }
+            } else {
+                mapel.tingkat = mapel.tingkat.filter(t => t !== tingkat);
+            }
+
+            this.updateMapel(mapel);
+        }
+    };
+}
+</script>
 @endsection

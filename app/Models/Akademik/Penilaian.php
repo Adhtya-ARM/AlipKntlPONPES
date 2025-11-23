@@ -2,32 +2,20 @@
 
 namespace App\Models\Akademik;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
-use App\Models\Akademik\GuruMapel;
-use App\Models\Akademik\RencanaPembelajaran;
-use App\Models\User\SantriProfile;
 
 class Penilaian extends Model
 {
-    protected $table = ['penilaian'];
-    protected $fillable = [
-        'guru_mapel_id', 'rencana_pembelajaran_id',
-        'santri_profile_id', 'bab_ke', 'semester',
-        'nilai', 'keterangan'
-    ];
+    protected $table = 'penilaians';
+    protected $fillable = ['santri_profile_id', 'guru_mapel_id', 'tanggal', 'jenis_penilaian', 'nilai', 'keterangan'];
 
-    public function guruMapel() {
-        return $this->BelongsTo(GuruMapel::class);
+    public function santriProfile()
+    {
+        return $this->belongsTo(\App\Models\User\SantriProfile::class, 'santri_profile_id');
     }
 
-    public function rencanaPembelajaran() {
-        return $this->BelongsTo(RencanaPembelajaran::class);
-    }
-
-    public function santri() {
-        return $this->BelongsTo(SantriProfile::class, 'santri_profile_id');
+    public function guruMapel()
+    {
+        return $this->belongsTo(\App\Models\Akademik\GuruMapel::class, 'guru_mapel_id');
     }
 }

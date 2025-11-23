@@ -3,62 +3,96 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
-use App\Models\User\Santri;
-use App\Models\User\SantriProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
+use App\Models\Akademik\Kelas;
+use App\Models\User\Santri;
+use App\Models\User\SantriProfile;
+use App\Models\User\WaliProfile;
+use App\Models\User\SantriKelas;
+
 class SantriController extends Controller
 {
-    // Definisikan nilai status yang valid
-    private const VALID_STATUSES = ["aktif", "non-aktif", "lulus", "dropout"];
+    private const VALID_STATUSES = ["aktif", "non-aktif", "lulus", "dropout"]; 
+    
+// ---------------------------------------------------------------------
+// INDEX (Menampilkan Daftar Santri)
+// ---------------------------------------------------------------------
+public function index(Request $request)
+{
+    // 1. Mulai Query Builder
+    $query = Santri::with([
+        "santriprofile.waliProfile",
+        "santriprofile.santriKelas.kelas",
+    ]);
 
-    /**
-     * Tampilkan daftar semua santri (READ - All).
-     */
-    public function index()
-    {
-        // 1. Ambil data dengan pagination (WAJIB PAGINATOR)
-        $santris = Santri::with("santriprofile")->paginate(10);
-
-        // 2. Inisialisasi Model Santri kosong untuk modal CREATE
-        // Ini memastikan variabel $santri (tunggal) selalu ada di view.
-        $santri = new Santri();
-
-        // 3. Kirim kedua variabel ke view
-        return view("User.Santri.index", compact("santris", "santri"));
+    // 2. Logika Filter Kelas
+    if ($request->filled('filter_kelas')) {
+        $query->whereHas('santriprofile.santriKelas', function($q) use ($request) {
+            $q->where('kelas_id', $request->filter_kelas);
+        });
     }
 
-    /**
-     * Tampilkan form untuk membuat santri baru (CREATE - Form).
-     */
-    public function create()
-    {
-        $statuses = self::VALID_STATUSES;
-        // Jika Anda menggunakan modal, metode ini mungkin tidak terpakai,
-        // tetapi tetap dipertahankan untuk Resource Controller standar.
-        return view("User.Santri.create", compact("statuses"));
+    // 3. Logika Pencarian
+    if ($request->filled('search')) {
+        $search = $request->search;
+        $query->where(function($q) use ($search) {
+            $q->where('nisn', 'like', "%{$search}%")
+              ->orWhereHas('santriprofile', function($q2) use ($search) {
+                  $q2->where('nama', 'like', "%{$search}%");
+              });
+        });
     }
 
+    // 4. Eksekusi Pagination
+    $santris = $query->paginate(10);
+
+    $statuses = self::VALID_STATUSES;
+    
+    // Data Dropdown Wali
+    $walis = WaliProfile::select("id", "nama")
+        ->orderBy('nama', 'asc')
+        ->get()
+        ->map(fn($w) => ["id" => $w->id, "nama" => (string)$w->nama]);
+
+    // Data Dropdown Kelas
+    $kelas = Kelas::select("id", "level")
+        ->orderBy('level', 'asc')
+        ->get()
+        ->map(fn($k) => ["id" => $k->id, "nama" => (string)$k->level]);
+
+    return view("User.Santri.index", compact("santris", "statuses", "walis", "kelas"));
+}
+
+// ---------------------------------------------------------------------
+// STORE (Simpan Data Baru)
+// ---------------------------------------------------------------------
     /**
-     * Simpan data santri baru ke database (CREATE - Store).
+     * 🔹 Simpan santri baru
      */
     public function store(Request $request)
     {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
+
         // 1. Validasi Input
         $validatedData = $request->validate([
-            "username" => "required|string|unique:santris,nis|max:50",
+            "username" => "required|string|unique:santris,username|max:50",
             "password" => "required|string|min:8|confirmed",
+            "nisn" => "required|string|unique:santris,nisn|max:20",
 
             // Data Profile Santri
             "nama" => "required|string|max:255",
-            "alamat" => "required|string|max:255",
-            "wali" => "required|string|max:255",
-            "kelas" => "required|string|max:100",
-            "kamar" => "required|string|max:100",
-            "status" => ["required", "string", Rule::in(self::VALID_STATUSES)],
+            "alamat" => "nullable|string|max:255",
+            "no_hp" => "nullable|string|max:20",
+            "wali_profile_id" => "nullable|exists:wali_profile,id",
         ]);
 
         // 2. Gunakan DB Transaction
@@ -67,84 +101,73 @@ class SantriController extends Controller
 
             // A. Simpan data ke tabel Santri
             $santri = Santri::create([
-                "username" => $validatedData["nis"],
+                "username" => $validatedData["username"],
                 "password" => Hash::make($validatedData["password"]),
+                "nisn" => $validatedData["nisn"],
             ]);
 
-            // B. Simpan data ke tabel SantriProfile menggunakan relasi
-            $santri->santriprofile()->create([
+            // B. Simpan data ke tabel SantriProfile
+            $santri->santriProfile()->create([
                 "nama" => $validatedData["nama"],
-                "alamat" => $validatedData["alamat"],
-                "wali" => $validatedData["wali"],
-                "kelas" => $validatedData["kelas"],
-                "kamar" => $validatedData["kamar"],
-                "status" => $validatedData["status"],
+                "alamat" => $validatedData["alamat"] ?? null,
+                "no_hp" => $validatedData["no_hp"] ?? null,
+                "wali_profile_id" => $validatedData["wali_profile_id"] ?? null,
             ]);
 
             DB::commit();
 
-            $santriNama = $validatedData["nama"];
-
             return redirect()
-                ->route("santris.index") // Pastikan route name Anda konsisten (santris.index atau santri.index)
-                ->with(
-                    "success",
-                    "Data Santri **" . $santriNama . "** berhasil ditambahkan!",
-                );
+                ->route("santri.index")
+                ->with("success", "Data Santri **" . $validatedData["nama"] . "** berhasil ditambahkan!");
         } catch (\Exception $e) {
             DB::rollback();
             return back()
                 ->withInput()
-                ->with(
-                    "error",
-                    "Gagal menyimpan data Santri. Detail: " . $e->getMessage(),
-                );
+                ->with("error", "Gagal menyimpan data Santri. Detail: " . $e->getMessage());
         }
     }
 
+// ---------------------------------------------------------------------
+// UPDATE (Edit Data)
+// ---------------------------------------------------------------------
     /**
-     * Tampilkan detail santri tertentu (READ - Single).
+     * Perbarui data santri di database (UPDATE - Store).
      */
-    public function show(Santri $santri)
-    {
-        $santri->load("santriprofile");
-        // Catatan: Jika Anda menggunakan modal untuk detail di index.blade.php, metode ini tidak akan terpanggil.
-        return view("User.Santri.show", compact("santri"));
-    }
-
-    /**
-     * Tampilkan form untuk mengedit santri tertentu (UPDATE - Form).
-     */
-    public function edit(Santri $santri)
-    {
-        $santri->load("santriprofile");
-        $statuses = self::VALID_STATUSES;
-        // Catatan: Jika Anda menggunakan modal untuk edit di index.blade.php, metode ini tidak akan terpanggil.
-        return view("User.Santri.edit", compact("santri", "statuses"));
-    }
-
     /**
      * Perbarui data santri di database (UPDATE - Store).
      */
     public function update(Request $request, Santri $santri)
     {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
+
         // 1. Validasi Input
         $validatedData = $request->validate([
             "username" => [
                 "required",
                 "string",
                 "max:50",
-                Rule::unique("santris")->ignore($santri->id),
+                Rule::unique('santris')->ignore($santri->id),
             ],
             "password" => "nullable|string|min:8|confirmed",
+            "nisn" => [
+                "required",
+                "string",
+                "max:20",
+                Rule::unique('santris')->ignore($santri->id),
+            ],
 
             // Data Profile Santri
             "nama" => "required|string|max:255",
-            "alamat" => "required|string|max:255",
-            "wali" => "required|string|max:255",
-            "kelas" => "required|string|max:100",
-            "kamar" => "required|string|max:100",
-            "status" => ["required", "string", Rule::in(self::VALID_STATUSES)],
+            "alamat" => "nullable|string|max:255",
+            "no_hp" => "nullable|string|max:20",
+            "wali_profile_id" => "nullable|exists:wali_profile,id",
+            "status" => "required|in:aktif,non-aktif,lulus,dropout",
+            "kelas_id" => "nullable|exists:kelas,id",
         ]);
 
         // 2. Gunakan DB Transaction
@@ -153,78 +176,95 @@ class SantriController extends Controller
 
             // A. Update data tabel Santri
             $santriData = [
-                "nis" => $validatedData["nis"],
+                "username" => $validatedData["username"],
+                "nisn" => $validatedData["nisn"],
             ];
 
             if (!empty($validatedData["password"])) {
-                $santriData["password"] = Hash::make(
-                    $validatedData["password"],
-                );
+                $santriData["password"] = Hash::make($validatedData["password"]);
             }
 
             $santri->update($santriData);
 
             // B. Update data tabel SantriProfile
-            $santri->santriprofile()->update([
+            $santri->santriProfile()->update([
                 "nama" => $validatedData["nama"],
-                "alamat" => $validatedData["alamat"],
-                "wali" => $validatedData["wali"],
-                "kelas" => $validatedData["kelas"],
-                "kamar" => $validatedData["kamar"],
+                "alamat" => $validatedData["alamat"] ?? null,
+                "no_hp" => $validatedData["no_hp"] ?? null,
+                "wali_profile_id" => $validatedData["wali_profile_id"] ?? null,
                 "status" => $validatedData["status"],
             ]);
 
-            DB::commit();
-
-            $santriNama = $validatedData["nama"];
-
-            return redirect()
-                ->route("santris.index") // Pastikan route name Anda konsisten
-                ->with(
-                    "success",
-                    "Data Santri **" . $santriNama . "** berhasil diperbarui!",
-                );
-        } catch (\Exception $e) {
-            DB::rollback();
-            return back()
-                ->withInput()
-                ->with(
-                    "error",
-                    "Gagal memperbarui data Santri. Detail: " .
-                        $e->getMessage(),
-                );
-        }
-    }
-
-    public function destroy(Santri $santri)
-    {
-        $nama = $santri->santriprofile->nama ?? "Nama Santri";
-
-        try {
-            DB::beginTransaction();
-
-            // 1. Hapus data profile terkait (CHILD)
-            // Ini akan mengatasi error Integrity Constraint 1451
-            if ($santri->santriprofile) {
-                $santri->santriprofile->delete();
+            // C. Update data Kelas (SantriKelas)
+            if (!empty($validatedData["kelas_id"])) {
+                // Cek apakah sudah ada data kelas
+                $santriKelas = $santri->santriProfile->santriKelas;
+                
+                if ($santriKelas) {
+                    // Update jika ada
+                    $santriKelas->update([
+                        'kelas_id' => $validatedData["kelas_id"]
+                    ]);
+                } else {
+                    // Buat baru jika belum ada
+                    $santri->santriProfile->santriKelas()->create([
+                        'kelas_id' => $validatedData["kelas_id"]
+                    ]);
+                }
+            } else {
+                // Jika kelas_id kosong/null, hapus relasi kelas jika ada (opsional, tergantung kebutuhan)
+                // $santri->santriProfile->santriKelas()->delete();
             }
-
-            // 2. Hapus data santri (PARENT)
-            $santri->delete();
 
             DB::commit();
 
             return redirect()
                 ->route("santri.index")
-                ->with(
-                    "success",
-                    "Data Santri **" . $nama . "** berhasil dihapus!",
-                );
+                ->with("success", "Data Santri **" . $validatedData["nama"] . "** berhasil diperbarui!");
         } catch (\Exception $e) {
             DB::rollback();
+            return back()
+                ->withInput()
+                ->with("error", "Gagal memperbarui data Santri. Detail: " . $e->getMessage());
+        }
+    }
+
+// ---------------------------------------------------------------------
+// DESTROY (Hapus Data)
+// ---------------------------------------------------------------------
+    /**
+     * 🔹 Hapus santri
+     */
+    public function destroy(Santri $santri)
+    {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $profile = $santri->santriprofile;
+            $nama = $profile->nama ?? "Santri";
+
+            if ($profile) {
+                $profile->santriKelas()->delete(); 
+                $profile->delete();
+            }
+
+            $santri->delete(); 
+            DB::commit();
+
+            return redirect()
+                ->route("santri.index")
+                ->with("success", "Data santri {$nama} berhasil dihapus!");
+        } catch (\Throwable $e) {
+            DB::rollBack();
             return back()->with(
                 "error",
-                "Gagal menghapus data Santri. Detail: " . $e->getMessage(),
+                "Gagal menghapus data santri. " . $e->getMessage(),
             );
         }
     }

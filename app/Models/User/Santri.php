@@ -16,18 +16,18 @@ class Santri extends Authenticatable
 
     protected $table = "santris";
 
-    protected $fillable = ["username", "password", "nis"];
+    protected $fillable = ["username", "password", "nisn"];
 
     protected $hidden = ["password", "remember_token"];
 
     public function getAuthIdentifierName(): string
     {
-        return "nis";
+        return "nisn";
     }
 
     public function getAuthIdentifier(): mixed
     {
-        return $this->nis;
+        return $this->nisn;
     }
 
     protected function casts(): array

@@ -1,336 +1,530 @@
 @extends('layouts.app')
 
-@section('title', 'Daftar Santri')
+@section('title', 'Kelola Data Siswa')
 
 @section('content')
+{{-- Deklarasi Alpine.js: Gunakan x-data untuk memuat santriHandler --}}
+<div x-data="santriHandler()" x-init="
+    @if($errors->any()) 
+        openModalOnValidationFailure(); 
+    @endif
+" x-cloak>
     
-    {{-- Container Utama Alpine --}}
-    <div x-data="{ 
-        isModalOpen: false, 
-        modalTitle: '', 
-        modalActionUrl: '', 
-        modalMethod: '',
-        isDetailMode: false, 
-        modalData: null,
+    {{-- ================= HEADER & FILTER AREA ================= --}}
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Kelola Data Siswa</h2>
         
-        // --- Alpine Functions ---
-        openCreateModal() {
-            this.modalTitle = 'Tambah Santri Baru';
-            this.modalActionUrl = '{{ route('santri.store') }}'; 
-            this.modalMethod = 'POST';
-            this.isDetailMode = false;
-            this.modalData = null; 
-            this.isModalOpen = true;
-            this.$nextTick(() => this.resetForm()); // Memastikan form bersih saat Create
-        },
-        
-        openEditModal(santri) {
-            const santriName = santri.santriprofile ? santri.santriprofile.nama : 'N/A';
-            this.modalTitle = 'Edit Santri: ' + santriName;
-            this.modalActionUrl = '{{ url('santri') }}/' + santri.id; 
-            this.modalMethod = 'PUT';
-            this.isDetailMode = false;
-            this.modalData = santri; 
-            this.isModalOpen = true;
-            this.$nextTick(() => this.fillForm(santri, false)); // Mengisi form saat Edit
-        },
-
-        openDetailModal(santri) {
-            const santriName = santri.santriprofile ? santri.santriprofile.nama : 'N/A';
-            this.modalTitle = 'Detail Santri: ' + santriName;
-            this.modalActionUrl = '';
-            this.modalMethod = '';
-            this.isDetailMode = true;
-            this.modalData = santri; 
-            this.isModalOpen = true;
-            this.$nextTick(() => this.fillForm(santri, true)); // Mengisi form dan Read-only saat Detail
-        },
-
-        // FUNGSI KRITIS: Mengisi semua field dengan data santri
-        fillForm(santri, isReadOnly) {
-            // Data Santri (tabel 'santris')
-            document.getElementById('nis').value = santri.nis ?? '';
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             
-            // Data Profile (tabel 'santri_profiles' melalui relasi)
-            if (santri.santriprofile) {
-                document.getElementById('nama').value = santri.santriprofile.nama ?? '';
-                document.getElementById('alamat').value = santri.santriprofile.alamat ?? '';
-                document.getElementById('wali').value = santri.santriprofile.wali ?? '';
-                document.getElementById('kelas').value = santri.santriprofile.kelas ?? '';
-                document.getElementById('kamar').value = santri.santriprofile.kamar ?? '';
-                document.getElementById('status').value = santri.santriprofile.status ?? '';
-            } else {
-                 this.resetFormFields(); // Bersihkan jika profile null
-            }
-            
-            // Atur read-only/disabled
-            const inputs = document.querySelectorAll('#santri-form-fields input, #santri-form-fields select, #santri-form-fields textarea');
-            inputs.forEach(input => {
-                // Pastikan input password tidak read-only/disabled di mode edit
-                if (input.id !== 'password' && input.id !== 'password_confirmation') {
-                    input.readOnly = isReadOnly;
-                    if (input.tagName === 'SELECT' || input.tagName === 'TEXTAREA') {
-                        input.disabled = isReadOnly;
-                    }
-                }
-            });
-            
-            // Sembunyikan/tampilkan field password di mode Detail
-            document.getElementById('password-group').style.display = isReadOnly ? 'none' : 'block';
-            document.getElementById('password_confirmation-group').style.display = isReadOnly ? 'none' : 'block';
-        },
-        
-        resetForm() {
-            document.getElementById('nis').value = '';
-            document.getElementById('password').value = '';
-            document.getElementById('password_confirmation').value = '';
-            this.resetFormFields();
-            
-            // Tampilkan kembali password fields saat reset (mode Create)
-            document.getElementById('password-group').style.display = 'block';
-            document.getElementById('password_confirmation-group').style.display = 'block';
+            {{-- FORM FILTER & PENCARIAN (Server Side) --}}
+            <form action="{{ url()->current() }}" method="GET" class="flex gap-2 w-full md:w-auto">
+                
+                {{-- Filter Kelas --}}
+                <select name="filter_kelas" onchange="this.form.submit()" class="border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm cursor-pointer">
+                    <option value="">Semua Kelas</option>
+                    @foreach($kelas as $k)
+                        @php 
+                        $kId = $k['id'] ?? $k->id; 
+                        $kNama = $k['nama'] ?? $k['level'];
+                        @endphp
+                        <option value="{{ $kId }}" {{ request('filter_kelas') == $kId ? 'selected' : '' }}>
+                            {{ $kNama }}
+                        </option>
+                    @endforeach
+                </select>
 
-            // Reset read-only status
-            const inputs = document.querySelectorAll('#santri-form-fields input, #santri-form-fields select, #santri-form-fields textarea');
-            inputs.forEach(input => {
-                input.readOnly = false;
-                if (input.tagName === 'SELECT' || input.tagName === 'TEXTAREA') {
-                    input.disabled = false;
-                }
-            });
-        },
-        
-        resetFormFields() {
-            // Membersihkan field profile
-            ['nama', 'alamat', 'wali', 'kelas', 'kamar', 'status'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.value = '';
-            });
-        }
-        // -----------------------
-    }">
+                {{-- Search Input --}}
+                <div class="relative w-full md:w-64">
+                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari NIS atau Nama..." class="w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm pl-3 pr-10">
+                    <button type="submit" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-blue-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </button>
+                </div>
+            </form>
 
-        {{-- Header & Tombol Tambah --}}
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-3xl font-semibold text-gray-700">Daftar Santri</h2>
-            <button @click="openCreateModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-150 shadow-md">
-                + Tambah Santri Baru
-            </button>
-        </div>
-
-        {{-- Tabel Data Santri --}}
-        @if ($santris->isEmpty())
-             <div class="bg-yellow-100 text-yellow-800 p-4 rounded-md border border-yellow-400">
-                Belum ada data santri yang tercatat.
+            {{-- TOMBOL AKSI --}}
+            <div class="flex flex-wrap gap-2">
+                <button @click="openCreateModal" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium transition shadow-sm flex items-center gap-1">
+                    <span>+</span> Siswa Baru
+                </button>
+                
+                <button x-show="selectedItems.length > 0" 
+                        @click="alert('Fitur hapus massal ID: ' + selectedItems.join(','))"
+                        x-transition
+                        class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded text-sm font-medium transition shadow-sm">
+                    Hapus (<span x-text="selectedItems.length"></span>)
+                </button>
             </div>
-        @else
-            <div class="bg-white shadow overflow-hidden rounded-lg">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NIS</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kelas</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kamar</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        @foreach ($santris as $santri)
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                                    {{ $loop->iteration + ($santris->currentPage() - 1) * $santris->perPage() }}
-                                </td>
-                                
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $santri->santriprofile->nama ?? '-' }}</td> 
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $santri->nis }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $santri->santriprofile->kelas ?? '-' }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $santri->santriprofile->kamar ?? '-' }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    @php
-                                        $statusValue = $santri->santriprofile->status ?? '';
-                                        $colorClass = match ($statusValue) {
-                                            'aktif' => 'bg-green-100 text-green-800', 'non-aktif' => 'bg-red-100 text-red-800',
-                                            'lulus' => 'bg-orange-100 text-orange-800', 'dropout' => 'bg-gray-400 text-white',
-                                            default => 'bg-gray-100 text-gray-800',
-                                        };
-                                        $statusLabel = match ($statusValue) {
-                                            'aktif' => 'Aktif', 'non-aktif' => 'Non-Aktif', 'lulus' => 'Lulus/Alumni', 'dropout' => 'DO', default => 'N/A',
-                                        };
-                                    @endphp
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $colorClass }}">
-                                        {{ $statusLabel }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                    
-                                    {{-- HARD FIX JSON BINDING --}}
-                                    <div x-data='{ santriData: @php echo json_encode($santri->load('santriprofile')->toArray()) @endphp }' class="inline-flex space-x-2">
+        </div>
+    </div>
 
-                                        {{-- Detail Button --}}
-                                        <button @click="openDetailModal(santriData)" 
-                                                class="text-xs font-semibold px-2 py-1 rounded text-indigo-600 hover:bg-indigo-100 transition duration-150">
-                                            Detail
-                                        </button>
-                                        
-                                        {{-- Edit Button --}}
-                                        <button @click="openEditModal(santriData)" 
-                                                class="text-xs font-semibold px-2 py-1 rounded text-yellow-600 hover:bg-yellow-100 transition duration-150">
-                                            Edit
-                                        </button>
-                                    </div>
+    {{-- ================= TABEL DATA ================= --}}
+    @if ($santris->isEmpty())
+        <div class="bg-yellow-50 text-yellow-800 p-6 rounded-lg border border-yellow-200 text-center">
+            <p class="font-medium">Tidak ada data santri ditemukan.</p>
+            @if(request('filter_kelas') || request('search'))
+                <a href="{{ url()->current() }}" class="text-blue-600 hover:underline text-sm mt-2 inline-block">Reset Filter</a>
+            @endif
+        </div>
+    @else
+        <div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 w-10 text-center">
+                            <input type="checkbox" @change="toggleAll" x-model="selectAll" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        </th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">NISN</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Nama Lengkap</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Kelas</th>
+                        <th class="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-wider">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    @foreach ($santris as $santri)
+                        @php
+                            $profile = $santri->santriprofile ?? null;
+                            
+                            $kelasObj = $profile->santriKelas->kelas ?? null; 
+                            $namaKelas = $kelasObj->level ?? '-';
+                            
+                            $waliName = $profile->waliProfile->nama ?? '-';
+                            
+                            $jsonData = $santri->load(['santriprofile.waliProfile', 'santriprofile.santriKelas.kelas']);
+                        @endphp
+                        <tr class="hover:bg-blue-50 transition">
+                            <td class="px-4 py-3 text-center">
+                                <input type="checkbox" value="{{ $santri->id }}" x-model="selectedItems" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            </td>
+                            <td class="px-4 py-3 text-gray-600 font-mono">{{ $santri->nisn }}</td>
+                            <td class="px-4 py-3 font-medium text-gray-900">
+                                {{ $profile->nama ?? '-' }}
+                                <div class="text-xs text-gray-400 mt-0.5">{{ $waliName }} (Wali)</div>
+                            </td>
+                            <td class="px-4 py-3 text-gray-600">
+                                <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs border border-gray-200">
+                                    {{ $namaKelas }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                @php
+                                    $status = strtolower($profile->status ?? '');
+                                    $color = match($status) {
+                                        'aktif' => 'bg-green-100 text-green-800 border-green-200',
+                                        'non-aktif' => 'bg-red-100 text-red-800 border-red-200',
+                                        'lulus' => 'bg-blue-100 text-blue-800 border-blue-200',
+                                        default => 'bg-gray-100 text-gray-800 border-gray-200'
+                                    };
+                                @endphp
+                                <span class="px-2 py-1 rounded-full text-xs font-medium border {{ $color }}">
+                                    {{ ucfirst($status ?: '-') }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <div class="flex justify-center items-center space-x-2">
+                                    <button @click='openEditModal(@json($jsonData))' class="text-blue-600 hover:bg-blue-100 p-1.5 rounded-md transition" title="Edit">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                    </button>
                                     
-                                    {{-- Delete Form (ROUTE TUNGGAL: santri.destroy) --}}
-                                    <form action="{{ route('santri.destroy', $santri) }}" method="POST" class="inline"> 
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" onclick="return confirm('Apakah Anda yakin ingin menghapus santri {{ $santri->santriprofile->nama ?? 'ini' }}?')" 
-                                                class="text-xs font-semibold px-2 py-1 rounded text-red-600 hover:bg-red-100 transition duration-150">
-                                            Hapus
+                                    <form action="{{ route('santri.destroy', $santri->id) }}" method="POST" class="inline">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" onclick="return confirm('Yakin ingin menghapus data ini?')" class="text-red-600 hover:bg-red-100 p-1.5 rounded-md transition" title="Hapus">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     </form>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-4 px-2">
+            {{ $santris->withQueryString()->links('vendor.pagination.tailwind') }}
+        </div>
+    @endif
+
+    {{-- ================= MODAL (CREATE / EDIT) ================= --}}
+    <div x-show="isModalOpen" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden transform transition-all" @click.away="isModalOpen = false">
+            
+            {{-- Modal Header --}}
+            <div class="flex justify-between items-center px-6 py-4 border-b bg-gray-50">
+                <h3 class="text-lg font-semibold text-gray-800" x-text="modalTitle"></h3>
+                <button @click="isModalOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
             </div>
 
-            <div class="mt-4">
-                @if (method_exists($santris, 'links'))
-                    {{ $santris->links('vendor.pagination.tailwind') }}
-                @else
-                    <p class="text-sm text-gray-600">Menampilkan {{ count($santris) }} data. Pagination dinonaktifkan.</p>
-                @endif
-            </div>
+            {{-- Modal Body --}}
+            <form :action="modalActionUrl" method="POST" class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                @csrf
+                <input type="hidden" name="_method" :value="modalMethod">
+                <input type="hidden" name="id" x-model="formData.id">
+                
+                {{-- Input NIS --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">NIS <span class="text-red-500">*</span></label>
+                    <input type="text" name="nisn" x-model="formData.nisn" required class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                    @error('nisn')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+                
+                {{-- Input Password (Baru) --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1" x-text="modalMethod === 'POST' ? 'Password Awal*' : 'Password Baru'"></label>
+                    <input type="password" name="password" x-model="formData.password" placeholder="Isi hanya jika ingin ubah/buat" :required="modalMethod === 'POST'" class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                    @error('password')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Input Nama Lengkap --}}
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Nama Lengkap <span class="text-red-500">*</span></label>
+                    <input type="text" name="nama" x-model="formData.nama" required class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                    @error('nama')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+                
+                {{-- Input Konfirmasi Password --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Konfirmasi Password</label>
+                    <input type="password" name="password_confirmation" x-model="formData.password_confirmation" :required="modalMethod === 'POST'" class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                    @error('password_confirmation')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Input No HP --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">No HP</label>
+                    <input type="text" name="no_hp" x-model="formData.no_hp" class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                    @error('no_hp')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Input Status --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Status <span class="text-red-500">*</span></label>
+                    <select name="status" x-model="formData.status" class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="aktif">Aktif</option>
+                        <option value="non-aktif">Non-Aktif</option>
+                        <option value="lulus">Lulus</option>
+                        <option value="dropout">Dropout</option>
+                    </select>
+                    @error('status')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Dropdown Wali (FIXED x-data binding) --}}
+                <div class="relative mb-4" 
+                     x-data='dropdownSearch({ 
+                         items: @json($walis), 
+                         initialId: $data.formData.wali_id, 
+                         initialName: $data.formData.wali_name 
+                     })'
+                     @click.outside="open = false"> 
+                    
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Wali Santri <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <input type="text" 
+                                x-model="search"
+                                @focus="open = true" 
+                                @input="open = true" 
+                                @keydown.escape="open = false"
+                                placeholder="Pilih atau cari wali..." 
+                                class="w-full rounded-md border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500" 
+                                autocomplete="off">
+                        
+                        <input type="hidden" name="wali_profile_id" x-model="selectedId">
+                        
+                        <div x-show="open" 
+                             x-transition.opacity.duration.200ms
+                             class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            
+                            <template x-for="item in filteredItems" :key="item.id">
+                                <div @click="select(item)" 
+                                     class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-gray-700 text-sm border-b border-gray-50 last:border-0"
+                                     :class="{'bg-blue-50 font-semibold': selectedId == item.id}">
+                                    <span x-text="item.nama"></span>
+                                </div>
+                            </template>
+                            <div x-show="filteredItems.length === 0" class="px-3 py-2 text-gray-400 text-xs italic">
+                                Data tidak ditemukan.
+                            </div>
+                        </div>
+                    </div>
+                    @error('wali_profile_id')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Dropdown Kelas (FIXED x-data binding) --}}
+                <div class="relative mb-4" 
+                     x-data='dropdownSearch({ 
+                         items: @json($kelas), 
+                         initialId: $data.formData.kelas_id, 
+                         initialName: $data.formData.kelas_name 
+                     })'
+                     @click.outside="open = false">
+                    
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Kelas <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <input type="text" 
+                                x-model="search" 
+                                @focus="open = true"
+                                @input="open = true"
+                                @keydown.escape="open = false"
+                                placeholder="Pilih atau cari kelas..." 
+                                class="w-full rounded-md border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500" 
+                                autocomplete="off">
+                                
+                        <input type="hidden" name="kelas_id" x-model="selectedId">
+                        
+                        <div x-show="open" 
+                             x-transition.opacity.duration.200ms
+                             class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                           <template x-for="item in filteredItems" :key="item.id">
+                                <div @click="select(item)" 
+                                     class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-gray-700 text-sm border-b border-gray-50 last:border-0"
+                                     :class="{'bg-blue-50 font-semibold': selectedId == item.id}">
+                                    <span x-text="item.nama"></span>
+                                </div>
+                           </template>
+                           <div x-show="filteredItems.length === 0" class="px-3 py-2 text-gray-400 text-xs italic">
+                                Data tidak ditemukan.
+                           </div>
+                        </div>
+                    </div>
+                    @error('kelas_id')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Input Alamat (Sekarang Opsional) --}}
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Alamat</label>
+                    <textarea name="alamat" x-model="formData.alamat" rows="2" class="w-full border-gray-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    @error('alamat')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+                </div>
+
+                {{-- Modal Footer --}}
+                <div class="md:col-span-2 flex justify-end space-x-3 pt-4 border-t mt-2">
+                    <button type="button" @click="isModalOpen = false" class="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition">Batal</button>
+                    <button type="submit" class="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition shadow-sm">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+{{-- ================= SCRIPTS ================= --}}
+<script>
+    document.addEventListener('alpine:init', () => {
+        
+        // --- HANDLER DATA UTAMA ---
+        // --- HANDLER DATA UTAMA ---
+        Alpine.data('santriHandler', () => ({
+            isModalOpen: false,
+            modalTitle: '',
+            modalActionUrl: '',
+            modalMethod: 'POST',
+            
+            formData: {
+                id: null, // Added ID field
+                nisn: '', nama: '', no_hp: '', alamat: '', status: 'aktif',
+                password: '', password_confirmation: '',
+                wali_id: null, wali_name: '', 
+                kelas_id: null, kelas_name: ''
+            },
+
+            selectAll: false,
+            selectedItems: [],
+            toggleAll() {
+                this.selectedItems = this.selectAll ? @json($santris->pluck('id')) : [];
+            },
+
+            /**
+             * 🔹 Membuka modal dan mengisi data lama jika terjadi kegagalan validasi.
+             */
+            openModalOnValidationFailure() {
+                const oldInput = @json(session()->getOldInput());
+                const isEdit = oldInput._method && oldInput._method.toUpperCase() === 'PUT';
+                
+                this.modalTitle = isEdit ? 'Edit Data Santri (Kesalahan Input)' : 'Tambah Santri Baru (Kesalahan Input)';
+                
+                // Cari ID santri dari old input (jika ada) atau dari route parameter (jarang terjadi di index)
+                let santriId = oldInput.id || @json(request()->route('santri')?->id);
+                
+                if(isEdit && santriId) {
+                    this.modalActionUrl = `/santri/${santriId}`;
+                } else {
+                    this.modalActionUrl = "{{ route('santri.store') }}"; 
+                }
+                
+                this.modalMethod = isEdit ? 'PUT' : 'POST';
+
+                this.formData = {
+                    id: santriId || null,
+                    nisn: oldInput.nisn || '',
+                    nama: oldInput.nama || '',
+                    no_hp: oldInput.no_hp || '',
+                    alamat: oldInput.alamat || '',
+                    status: oldInput.status || 'aktif',
+                    password: '', 
+                    password_confirmation: '', 
+                    wali_id: oldInput.wali_profile_id || null, 
+                    wali_name: '', 
+                    kelas_id: oldInput.kelas_id || null, 
+                    kelas_name: '', 
+                };
+
+                // REVISI: Cari Nama Wali dan Kelas dari ID lama (oldInput)
+                // Data Wali
+                if (oldInput.wali_profile_id) {
+                    const walisData = @json($walis);
+                    const wali = walisData.find(w => w.id == oldInput.wali_profile_id);
+                    this.formData.wali_name = wali ? wali.nama : '';
+                }
+                
+                // Data Kelas (Hanya gunakan Level)
+                if (oldInput.kelas_id) {
+                    const kelasData = @json($kelas);
+                    const kelas = kelasData.find(k => k.id == oldInput.kelas_id);
+                    
+                    if (kelas) {
+                        this.formData.kelas_name = kelas.nama || '';
+                    } else {
+                        this.formData.kelas_name = '';
+                    }
+                }
+
+                this.isModalOpen = true;
+            },
+
+            openCreateModal() {
+                this.modalTitle = 'Tambah Santri Baru';
+                this.modalActionUrl = "{{ route('santri.store') }}";
+                this.modalMethod = 'POST';
+                this.resetForm();
+                this.isModalOpen = true;
+            },
+
+            openEditModal(data) {
+                this.modalTitle = 'Edit Data Santri';
+                this.modalActionUrl = `/santri/${data.id}`;
+                this.modalMethod = 'PUT';
+
+                let namaKelas = '';
+                if(data.santriprofile?.santri_kelas?.kelas) {
+                    const k = data.santriprofile.santri_kelas.kelas;
+                    // Tampilkan hanya Level (misal: 1A)
+                    namaKelas = k.level; 
+                }
+
+                this.formData = {
+                    id: data.id, // Set ID
+                    nisn: data.nisn,
+                    nama: data.santriprofile?.nama || '',
+                    no_hp: data.santriprofile?.no_hp || '',
+                    alamat: data.santriprofile?.alamat || '',
+                    status: data.santriprofile?.status || 'aktif',
+                    password: '', 
+                    password_confirmation: '', 
+                    wali_id: data.santriprofile?.wali_profile_id,
+                    wali_name: data.santriprofile?.wali_profile?.nama || '',
+                    kelas_id: data.santriprofile?.santri_kelas?.kelas_id,
+                    kelas_name: namaKelas
+                };
+                this.isModalOpen = true;
+            },
+
+            resetForm() {
+                this.formData = {
+                    id: null,
+                    nisn: '', nama: '', no_hp: '', alamat: '', status: 'aktif',
+                    password: '', password_confirmation: '', 
+                    wali_id: null, wali_name: '', kelas_id: null, kelas_name: ''
+                };
+            }
+        }));
+
+        // --- DROPDOWN SEARCH GOOGLE-STYLE ---
+        Alpine.data('dropdownSearch', (config) => ({
+            items: config.items,
+            search: config.initialName || '',
+            selectedId: config.initialId || null,
+            open: false,
+
+            init() {
+                // Watcher untuk sinkronisasi data dari tombol Edit (parent scope)
+                this.$watch(() => this.$root.querySelector('input[name="wali_profile_id"], input[name="kelas_id"]').value, () => {
+                     this.selectedId = config.initialId;
+                     this.search = config.initialName;
+                });
+
+                this.$watch(() => config.initialId, (val) => { 
+                    this.selectedId = val; 
+                    if (val === null) this.search = '';
+                });
+                this.$watch(() => config.initialName, (val) => { 
+                    this.search = val; 
+                });
+                
+                // Watcher: Jika user menghapus text search manual sampai habis, reset ID
+                this.$watch('search', (val) => {
+                    if(val === '' && this.selectedId !== null) {
+                        this.selectedId = null;
+                        // Hapus ID juga dari formData di parent scope
+                        if (config.initialId === $data.formData.wali_id) {
+                            $data.formData.wali_id = null;
+                        } else if (config.initialId === $data.formData.kelas_id) {
+                            $data.formData.kelas_id = null;
+                        }
+                    }
+                });
+            },
+
+            get filteredItems() {
+                if (this.search === '' || this.search === null) {
+                    return this.items;
+                }
+                return this.items.filter(item => {
+                    // Filter berdasarkan nama lengkap (Level Nama_Kelas atau Nama Wali)
+                    return item.nama.toLowerCase().includes(this.search.toLowerCase());
+                });
+            },
+
+            select(item) {
+                this.selectedId = item.id;
+                
+                let displayNama = item.nama;
+                
+                this.search = displayNama;
+                this.open = false;
+                
+                // Sinkronkan ke formData di parent scope
+                if (config.initialId === $data.formData.wali_id) {
+                    $data.formData.wali_id = item.id;
+                    $data.formData.wali_name = item.nama;
+                } else if (config.initialId === $data.formData.kelas_id) {
+                    $data.formData.kelas_id = item.id;
+                    $data.formData.kelas_name = displayNama; 
+                }
+            }
+        }));
+
+        // SweetAlert Toast Setup
+        const Toast = Swal.mixin({
+            toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        });
+
+        // Cek Session dari Controller Laravel
+        @if(session('success'))
+            Toast.fire({ icon: 'success', title: "{{ session('success') }}" });
         @endif
 
-        {{-- MODAL CONTAINER --}}
-        <div x-show="isModalOpen" 
-             x-cloak 
-             x-transition:enter="ease-out duration-300" 
-             x-transition:enter-start="opacity-0" 
-             x-transition:enter-end="opacity-100" 
-             x-transition:leave="ease-in duration-200" 
-             x-transition:leave-start="opacity-100" 
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-50 overflow-y-auto" 
-             style="display: none;">
+        @if(session('error'))
+            Toast.fire({ icon: 'error', title: "{{ session('error') }}" });
+        @endif
 
-            {{-- Background Overlay --}}
-            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="isModalOpen = false"></div>
-
-            {{-- Modal Content Container --}}
-            <div class="flex items-center justify-center min-h-screen">
-                <div x-transition:enter="ease-out duration-300"
-                     x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                     x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-                     x-transition:leave="ease-in duration-200"
-                     x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-                     x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                     class="bg-white rounded-lg shadow-xl transform transition-all max-w-lg w-full mx-4 my-8" 
-                     @click.away="isModalOpen = false">
-                    
-                    <div class="p-6 border-b border-gray-200">
-                        <h3 class="text-xl font-semibold text-gray-900" x-text="modalTitle"></h3>
-                        <p class="text-sm text-gray-500 mt-1" 
-                           x-text="isDetailMode ? 'Data lengkap santri bersifat baca-saja.' : (modalMethod == 'POST' ? 'Masukkan data santri baru.' : 'Ubah data santri ini.')">
-                        </p>
-                    </div>
-
-                    {{-- Form: Digunakan untuk CREATE, EDIT, dan DISPLAY DETAIL --}}
-                    {{-- ID santri-form-fields sangat penting untuk fungsi fillForm dan resetForm --}}
-                    <form :action="modalActionUrl" method="POST" class="px-6 pb-6" id="santri-form-fields" @submit.prevent="isDetailMode ? '' : $el.submit()">
-                        @csrf
-                        
-                        <template x-if="modalMethod == 'PUT'">
-                            @method('PUT')
-                        </template>
-
-                        {{-- Input Fields: Ganti dengan kode input form Anda --}}
-                        <div class="py-6 space-y-4">
-                            
-                            {{-- NIS --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="nis" class="block text-xs font-medium text-gray-500">NIS</label>
-                                <input type="text" id="nis" name="nis" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                            </div>
-                            
-                            {{-- Password Group --}}
-                            <div id="password-group" class="border-b border-gray-200 py-2">
-                                <label for="password" class="block text-xs font-medium text-gray-500" x-text="modalMethod == 'PUT' ? 'Password Baru (Kosongkan jika tidak diubah)' : 'Password'">Password</label>
-                                <input type="password" id="password" name="password" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" :required="modalMethod == 'POST'">
-                            </div>
-
-                            {{-- Konfirmasi Password Group --}}
-                            <div id="password_confirmation-group" class="border-b border-gray-200 py-2">
-                                <label for="password_confirmation" class="block text-xs font-medium text-gray-500">Konfirmasi Password</label>
-                                <input type="password" id="password_confirmation" name="password_confirmation" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" :required="modalMethod == 'POST'">
-                            </div>
-                            
-                            <h4 class="text-base font-semibold text-gray-700 pt-4">Data Profil</h4>
-                            
-                            {{-- Nama --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="nama" class="block text-xs font-medium text-gray-500">Nama Lengkap</label>
-                                <input type="text" id="nama" name="nama" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                            </div>
-
-                            {{-- Alamat (Menggunakan textarea untuk alamat) --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="alamat" class="block text-xs font-medium text-gray-500">Alamat</label>
-                                <textarea id="alamat" name="alamat" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" rows="2" required></textarea>
-                            </div>
-
-                            {{-- Wali --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="wali" class="block text-xs font-medium text-gray-500">Wali (Nama Orang Tua)</label>
-                                <input type="text" id="wali" name="wali" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                            </div>
-
-                            {{-- Kelas --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="kelas" class="block text-xs font-medium text-gray-500">Kelas</label>
-                                <input type="text" id="kelas" name="kelas" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                            </div>
-                            
-                            {{-- Kamar --}}
-                            <div class="border-b border-gray-200 py-2">
-                                <label for="kamar" class="block text-xs font-medium text-gray-500">Kamar</label>
-                                <input type="text" id="kamar" name="kamar" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                            </div>
-
-                            {{-- Status --}}
-                            <div class="py-2">
-                                <label for="status" class="block text-xs font-medium text-gray-500">Status</label>
-                                <select id="status" name="status" class="mt-1 block w-full border-0 p-0 text-sm text-gray-900 focus:ring-0" required>
-                                    <option value="aktif">Aktif</option>
-                                    <option value="non-aktif">Non-Aktif</option>
-                                    <option value="lulus">Lulus/Alumni</option>
-                                    <option value="dropout">Dropout</option>
-                                </select>
-                            </div>
-
-                        </div>
-
-                        
-                        <div class="mt-4 flex justify-end space-x-3">
-                            <button type="button" @click="isModalOpen = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
-                                Tutup
-                            </button>
-                            {{-- Tombol Simpan hanya muncul saat Create/Edit --}}
-                            <template x-if="!isDetailMode">
-                                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                                    Simpan Data
-                                </button>
-                            </template>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-    </div>
+        // Tampilkan error validasi jika ada
+        @if($errors->any())
+            Toast.fire({ icon: 'warning', title: 'Periksa kembali inputan Anda.' });
+        @endif
+    });
+</script>
 @endsection

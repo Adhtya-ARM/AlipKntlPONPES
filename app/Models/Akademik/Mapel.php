@@ -17,14 +17,27 @@ class Mapel extends Model
 
     protected $table = "mapel";
 
-    protected $fillable = ["nama_mapel"];
+    protected $fillable = [
+        "nama_mapel", 
+        "kategori",
+        "kelompok",
+        "jjm", 
+        "tingkat"
+    ];
+    
+    protected $casts = [
+        'tingkat' => 'array',
+    ];
 
-     public function guruMapels()
-     {
-         return $this->HasMany(GuruMapel::class, 'mapel_id');
-     }
+    /**
+     * Relasi ke GuruMapel
+     */
+    public function guruMapels()
+    {
+        return $this->hasMany(GuruMapel::class);
+    }
      
-     public function guruProfiles()
+     public function guruProfile()
          {
              return $this->BelongsToMany(GuruProfile::class,  'guru_mapel', 'mapel_id', 'guru_profile_id' )->withTimestamps();
          }

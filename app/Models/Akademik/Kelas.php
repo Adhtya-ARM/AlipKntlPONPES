@@ -19,7 +19,6 @@ class Kelas extends Model
     protected $table = 'kelas';
 
     protected $fillable = [
-        'nama_kelas',
         'level',
         'nama_unik',
         'guru_profile_id', // kalau ini masih digunakan
@@ -46,9 +45,9 @@ class Kelas extends Model
     }
 
     // 🔹 Ambil data santri dari pivot
-    public function santriProfiles(): BelongsToMany
+    public function santriProfile()
       {
-          return $this->belongsToMany(SantriProfile::class, 'santri_kelas', 'kelas_id', 'santri_profile_id',)
+          return $this->BelongsToMany(SantriProfile::class, 'santri_kelas', 'kelas_id', 'santri_profile_id',)
               ->withPivot(['tahun_ajaran'])
               ->withTimestamps();
       }

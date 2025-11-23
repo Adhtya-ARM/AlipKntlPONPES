@@ -13,46 +13,70 @@ use Illuminate\Validation\Rule;
 class GuruController extends Controller
 {
     // Definisikan nilai status yang valid (opsional, jika ada status untuk guru)
-    private const VALID_STATUSES = ["aktif", "non-aktif"];
+    // Definisikan nilai status yang valid (opsional, jika ada status untuk guru)
+    // private const VALID_STATUSES = ["aktif", "non-aktif"];
 
     /**
      * Tampilkan daftar semua guru (READ - All).
      */
-    public function index()
+    public function index(Request $request)
     {
-        // 1. Ambil data dengan pagination (WAJIB PAGINATOR)
-        $gurus = Guru::with("guruProfile")->paginate(10);
+        // 1. Mulai Query Builder
+        $query = Guru::with("guruProfile");
 
-        // 2. Inisialisasi Model Guru kosong untuk modal CREATE
-        $guru = new Guru();
+        // 2. Logika Pencarian
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('username', 'like', "%{$search}%")
+                  ->orWhereHas('guruProfile', function($q2) use ($search) {
+                      $q2->where('nama', 'like', "%{$search}%");
+                  });
+            });
+        }
 
-        // 3. Kirim kedua variabel ke view
-        return view("User.Guru.index", compact("gurus", "guru"));
+        // 3. Eksekusi Pagination
+        $gurus = $query->paginate(10);
+
+        // 4. Kirim ke view
+        return view("User.Guru.index", compact("gurus"));
     }
 
     /**
      * Tampilkan form untuk membuat guru baru (CREATE - Form).
      */
+    /**
+     * Tampilkan form untuk membuat guru baru (CREATE - Form).
+     */
     public function create()
     {
-        $statuses = self::VALID_STATUSES;
-        return view("User.Guru.create", compact("statuses"));
+        return view("User.Guru.create");
     }
 
     /**
      * Simpan data guru baru ke database (CREATE - Store).
      */
+    /**
+     * Simpan data guru baru ke database (CREATE - Store).
+     */
     public function store(Request $request)
     {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
+
         // 1. Validasi Input
         $validatedData = $request->validate([
-            "username" => "required|string|unique:guru,username|max:50",
+            "username" => "required|string|unique:guru,username|unique:wali,username|max:50",
             "password" => "required|string|min:8|confirmed",
 
             // Data Profile Guru
             "nama" => "required|string|max:255",
             "jabatan" => "required|string|max:255",
-            "alamat" => "required|string|max:255",
+            "alamat" => "nullable|string|max:255", // Nullable
             "no_hp" => "nullable|string|max:20",
         ]);
 
@@ -63,15 +87,15 @@ class GuruController extends Controller
             // A. Simpan data ke tabel Guru
             $guru = Guru::create([
                 "username" => $validatedData["username"],
-                "password" => $validatedData["password"],
+                "password" => Hash::make($validatedData["password"]), // Hash password
             ]);
 
             // B. Simpan data ke tabel GuruProfile menggunakan relasi
             $guru->guruProfile()->create([
                 "nama" => $validatedData["nama"],
                 "jabatan" => $validatedData["jabatan"],
-                "alamat" => $validatedData["alamat"],
-                "no_hp" => $validatedData["no_hp"],
+                "alamat" => $validatedData["alamat"] ?? null,
+                "no_hp" => $validatedData["no_hp"] ?? null,
             ]);
 
             DB::commit();
@@ -107,11 +131,13 @@ class GuruController extends Controller
     /**
      * Tampilkan form untuk mengedit guru tertentu (UPDATE - Form).
      */
+    /**
+     * Tampilkan form untuk mengedit guru tertentu (UPDATE - Form).
+     */
     public function edit(Guru $guru)
     {
         $guru->load("guruProfile");
-        $statuses = self::VALID_STATUSES;
-        return view("User.Guru.edit", compact("guru", "statuses"));
+        return view("User.Guru.edit", compact("guru"));
     }
 
     /**
@@ -119,20 +145,27 @@ class GuruController extends Controller
      */
     public function update(Request $request, Guru $guru)
     {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
+
         // 1. Validasi Input
         $validatedData = $request->validate([
             "username" => [
                 "required",
                 "string",
                 "max:50",
-                Rule::unique("guru")->ignore($guru->id),
+                // FIX: Tidak ada validasi unique saat update (sesuai request user)
             ],
             "password" => "nullable|string|min:8|confirmed",
 
             // Data Profile Guru
             "nama" => "required|string|max:255",
             "jabatan" => "required|string|max:255",
-            "alamat" => "required|string|max:255",
+            "alamat" => "nullable|string|max:255", // Nullable
             "no_hp" => "nullable|string|max:20",
         ]);
 
@@ -146,7 +179,7 @@ class GuruController extends Controller
             ];
 
             if (!empty($validatedData["password"])) {
-                $guruData["password"] = $validatedData["password"];
+                $guruData["password"] = Hash::make($validatedData["password"]); // Hash password
             }
 
             $guru->update($guruData);
@@ -155,8 +188,8 @@ class GuruController extends Controller
             $guru->guruProfile()->update([
                 "nama" => $validatedData["nama"],
                 "jabatan" => $validatedData["jabatan"],
-                "alamat" => $validatedData["alamat"],
-                "no_hp" => $validatedData["no_hp"],
+                "alamat" => $validatedData["alamat"] ?? null,
+                "no_hp" => $validatedData["no_hp"] ?? null,
             ]);
 
             DB::commit();
@@ -186,6 +219,12 @@ class GuruController extends Controller
      */
     public function destroy(Guru $guru)
     {
+        // Cek Permission Waka/Kepsek
+        $currentUser = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $jabatan = strtolower($currentUser->guruProfile->jabatan ?? '');
+        if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
+            abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
+        }
         $nama = $guru->guruProfile->nama ?? "Nama Guru";
 
         try {

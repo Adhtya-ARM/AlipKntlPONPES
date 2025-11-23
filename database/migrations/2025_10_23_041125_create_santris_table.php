@@ -13,7 +13,7 @@ return new class extends Migration {
         Schema::create("santris", function (Blueprint $table) {
             $table->id();
             $table->string("username")->unique();
-            $table->integer("nis")->unique();
+            $table->integer("nisn")->unique();
             $table->string("password");
             $table->timestamps();
         });

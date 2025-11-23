@@ -15,9 +15,21 @@ class Guru extends Authenticatable
     use HasFactory, Notifiable, HasRoles;
 
     protected $table = "guru";
-    protected $fillable = ["username", "password"];
+    protected $fillable = [
+        'username',
+        'password',
+        'is_active',
+    ];
 
-    protected $hidden = ["password", "remember_token"];
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'password' => 'hashed',
+        'is_active' => 'boolean',
+    ];
 
     public function findForAuth($username)
     {
@@ -26,7 +38,7 @@ class Guru extends Authenticatable
 
     public function getDisplayNameAttribute()
     {
-        if ($this->relationLoaded('guruProfile') && $this->guruProfile) {
+        if ($this->relationLoaded("guruProfile") && $this->guruProfile) {
             return $this->guruProfile->nama ?? $this->username;
         }
     }
@@ -40,7 +52,6 @@ class Guru extends Authenticatable
 
     public function guruProfile()
     {
-        return $this->HasOne(GuruProfile::class, 'guru_id');
+        return $this->HasOne(GuruProfile::class, "guru_id");
     }
-
 }

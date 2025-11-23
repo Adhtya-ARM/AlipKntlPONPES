@@ -5,211 +5,438 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Gate; // Digunakan untuk otorisasi lebih lanjut
-use Illuminate\Database\Eloquent\Builder; // Digunakan untuk query yang lebih kompleks
 
-// Impor Model yang dibutuhkan
+// Models (sesuaikan namespace jika berbeda)
 use App\Models\Akademik\GuruMapel;
 use App\Models\Akademik\Mapel;
 use App\Models\Akademik\Penilaian;
+use App\Models\Akademik\RencanaPembelajaran;
+use App\Models\User\SantriKelas;
 use App\Models\User\SantriProfile;
-use App\Models\User\Santri; // Pastikan ini diimpor jika diperlukan
+use App\Models\User\Santri;
+use App\Models\User\Guru;
+use App\Models\User\WaliProfile;
 
 class DashboardController extends Controller
 {
     /**
-     * Menampilkan dashboard berdasarkan role/guard yang sedang login.
-     * Route ini akan dipanggil oleh setiap role: /guru/dashboard, /santri/dashboard, dst.
+     * Entry point dashboard. Expects route default 'guard' (contoh: ->defaults(['guard'=>'guru'])).
      */
-<<<<<<< HEAD
-    public function index(Request $request, string $guard)
+    public function index(Request $request)
     {
-        // 1. Validasi Akses dan Guard
-        // Middleware ('auth:guard') seharusnya sudah memastikan user login
-        // Kita hanya perlu memastikan guard yang diminta di URL benar-benar di-autentikasi.
-=======
-    public function index()
-    {
-        // 1. Ambil guard dari route defaults
-        $guard = request()->route()->defaults['guard'] ?? 'web';
+        $guard = $request->route()->defaults['guard'] ?? 'web';
 
-        // 2. Validasi Guard
-        $allGuards = array_keys(Config::get('auth.guards'));
-        if (!in_array($guard, $allGuards)) {
-            // Jika guard yang diminta di URL tidak valid, redirect ke login
-            return redirect('/login');
+        $allGuards = array_keys(Config::get('auth.guards', []));
+        if (!in_array($guard, $allGuards, true)) {
+            return redirect('/login')->with('error', 'Guard yang diakses tidak valid.');
         }
 
-        // 3. Cek apakah pengguna benar-benar login di guard tersebut
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
         if (!Auth::guard($guard)->check()) {
-             // Jika middleware gagal, atau user mencoba akses langsung tanpa auth.
             return redirect()->route('login');
         }
 
-        // Ambil data pengguna yang sedang login
         $user = Auth::guard($guard)->user();
-<<<<<<< HEAD
-        
-        // 2. Tentukan Data dan View berdasarkan Role
+
         switch ($guard) {
             case 'guru':
                 return $this->handleGuruDashboard($user);
-
             case 'santri':
                 return $this->handleSantriDashboard($user);
-            
             case 'wali':
                 return $this->handleWaliDashboard($user);
-                
             case 'web':
-                return $this->handleWebDashboard($user);
-=======
-
-        // Tentukan data dan view berdasarkan role (guard)
-        switch ($guard) {
-            case 'guru':
-                // Ambil data untuk dashboard guru
-                $guruProfile = $user->guruProfile; // Use the correct relationship method
-                if (!$guruProfile) {
-                    // Handle case where guruProfile is null
-                    return redirect()->route('login')->with('error', 'Profile guru tidak ditemukan.');
-                }
-                $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
-                $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
-
-                // Hitung total santri yang diajar (unik berdasarkan kelas mapel)
-                $kelasMapels = $mapels->pluck('kelas')->unique();
-                $totalSantri = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->count();
-
-                // Total penilaian yang sudah diinput oleh guru ini
-                $totalPenilaian = \App\Models\Akademik\Penilaian::where('guru_profile_id', $guruProfile->id)->count();
-
-                return view('dashboard.guru', compact('mapels', 'totalSantri', 'totalPenilaian'));
-
-            case 'santri':
-
-
-
-                return view('dashboard.santri');
-
-            case 'wali':
-
-                return view('dashboard.wali');
-
-            case 'web':
-
-                return view('admin.dashboard');
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
-
             default:
-                // Jika route /nama_guard_aneh/dashboard diakses, kembalikan 403 atau redirect.
-                return abort(403, 'Akses dashboard role ini tidak diizinkan.');
+                return $this->handleWebDashboard($user);
         }
     }
 
-<<<<<<< HEAD
-    // --- LOGIKA DASHBOARD TERPISAH (CLEANER CODE) ---
-
+    /**
+     * Guru dashboard: mempertimbangkan session('active_guru_role').
+     */
     private function handleGuruDashboard($user)
     {
-        // Asumsi: Model Guru memiliki relasi 'guruProfile()'
-        $guruProfile = $user->guruProfile; // Perbaiki nama relasi jika perlu (e.g., $user->profile)
+        $guruProfile = $user->guruProfile ?? null;
 
         if (!$guruProfile) {
-            // Log user out atau redirect dengan pesan error jika profile tidak ditemukan
             Auth::guard('guru')->logout();
-            return redirect()->route('login')->with('error', 'Profile guru tidak ditemukan. Silakan hubungi admin.');
+            return redirect()->route('login')->with('error', 'Profil guru tidak ditemukan. Hubungi admin.');
         }
 
-        // 1. Ambil Mapel yang diajar
-        $mapels = $guruProfile->guruMapels()->with('mapel')->get()->pluck('mapel');
+        // Ambil semua mapel yang diajar oleh guru (relasi atau model pivot)
+        // Support dua pola: relasi guruMapels() yang punya relation mapel OR direct relation mapels()
+        $guruMapels = collect();
 
-        // 2. Hitung total santri unik yang diajar (berdasarkan kelas)
-        //$kelasIds = $mapels->pluck('kelas_id')->unique(); 
-       // $totalSantri = SantriProfile::whereIn('kelas_id', $kelasIds)->count();
+        if (method_exists($guruProfile, 'guruMapels')) {
+            $guruMapels = $guruProfile->guruMapels()->with(['mapel', 'kelas'])->get();
+        } elseif (method_exists($guruProfile, 'mapels')) {
+            $guruMapels = $guruProfile->mapels()->withPivot('kelas_id')->get();
+        }
 
-        // 3. Total Penilaian
-        //$totalPenilaian = Penilaian::where('guru_profile_id', $guruProfile->id)->count();
+        // Extract Mapel model collection (robust)
+        $mapels = $guruMapels->map(function ($item) {
+            // jika item adalah pivot container with relation
+            if (isset($item->mapel) && $item->mapel) {
+                return $item->mapel;
+            }
+            // jika item itself adalah Mapel
+            return $item;
+        })->filter()->unique('id')->values();
 
-        return view('dashboard.guru', compact('mapels',  'guruProfile'));  // 'totalPenilaian', 'totalSantri',
+        // Tentukan kelas id/identifier dari mapel (cari fields umum: kelas_id, kelas, level)
+        $kelasIds = $mapels->map(function ($m) {
+            if (isset($m->kelas_id)) return $m->kelas_id;
+            if (isset($m->kelas)) return $m->kelas;
+            if (isset($m->level)) return $m->level;
+            return null;
+        })->filter()->unique()->values()->all();
+
+        // Ambil active role (mts|ma|both) dari session/user fallback
+        $activeRole = session('active_guru_role') ?? ($user->last_active_guru_role ?? null);
+        $activeRole = $this->normalizeActiveRole($activeRole, $user->sub_roles ?? []);
+
+        // Total santri yang diajar: cari berdasarkan kelas identifier yang tersedia
+        $totalSantri = 0;
+        if (!empty($kelasIds)) {
+            // coba dua kemungkinan kolom pada SantriKelas: kelas_id atau kelas
+            $query = SantriKelas::query();
+            if (SchemaHasColumn(SantriKelas::class, 'kelas_id')) {
+                $query->whereIn('kelas_id', $kelasIds);
+            } elseif (SchemaHasColumn(SantriKelas::class, 'kelas')) {
+                $query->whereIn('kelas', $kelasIds);
+            } else {
+                // fallback: jika SantriProfile menyimpan kelas, cari dari sana
+                $totalSantri = SantriProfile::whereIn('kelas', $kelasIds)->count();
+            }
+
+            if ($totalSantri === 0) {
+                try {
+                    $totalSantri = $query->count();
+                } catch (\Throwable $e) {
+                    $totalSantri = 0;
+                }
+            }
+        }
+
+        // Filter penilaian sesuai guru mapel yang diajar
+        $guruMapelIds = $guruMapels->pluck('id')->toArray();
+        $totalPenilaian = !empty($guruMapelIds) 
+            ? Penilaian::whereIn('guru_mapel_id', $guruMapelIds)->count() 
+            : 0;
+
+        // Ambil data kalender akademik bulan ini
+        $currentMonth = now()->format('Y-m');
+        $kalenderData = RencanaPembelajaran::forMonth($currentMonth)->get();
+        
+        // Format kalender untuk view (grouping by date)
+        $kalenderEvents = [];
+        foreach ($kalenderData as $item) {
+            $from = \Carbon\Carbon::parse($item->from_date);
+            $to = \Carbon\Carbon::parse($item->to_date);
+            
+            // Loop semua tanggal dari from_date sampai to_date
+            $current = $from->clone();
+            while ($current->lte($to)) {
+                $dateKey = $current->format('Y-m-d');
+                if (!isset($kalenderEvents[$dateKey])) {
+                    $kalenderEvents[$dateKey] = [];
+                }
+                $kalenderEvents[$dateKey][] = [
+                    'jenis' => $item->jenis,
+                    'judul' => $item->judul,
+                    'catatan' => $item->catatan,
+                ];
+                $current->addDay();
+            }
+        }
+
+        return view('Dashboard.Guru', compact('mapels', 'guruMapels', 'guruProfile', 'totalSantri', 'totalPenilaian', 'activeRole', 'kalenderEvents'));
     }
 
+    /**
+     * Santri dashboard.
+     */
     private function handleSantriDashboard($user)
     {
-        // Asumsi: Santri memiliki relasi SantriProfile()
-        $santriProfile = $user->santriProfile; // Ambil profile santri
+        $santriProfile = $user->SantriProfile ?? null;
 
-        // 1. Data Penilaian Santri
-        $penilaian = $santriProfile->penilaian()->with(['guruProfile', 'mapel'])->get();
+        if (!$santriProfile) {
+            Auth::guard('santri')->logout();
+            return redirect()->route('login')->with('error', 'Profil santri tidak ditemukan.');
+        }
 
-        // 2. Data Pelanggaran (contoh)
-        // $pelanggaran = $user->pelanggaran;
+        // Ambil kelas aktif santri
+        $kelasAktif = $santriProfile->santriKelas ?? null;
+        $kelas = $kelasAktif ? $kelasAktif->kelas : null;
 
-        return view('dashboard.santri', compact('santriProfile', 'penilaian'));
+        // Ambil mapel yang terdaftar (melalui guru_mapel)
+        $mapels = collect();
+        if ($kelas) {
+            $mapels = GuruMapel::where('kelas_id', $kelas->id)
+                ->with(['mapel', 'guruProfile'])
+                ->get();
+        }
+
+        // Statistik Absensi bulan ini
+        $bulanIni = now()->format('Y-m');
+        $absensiStats = [
+            'hadir' => $santriProfile->absensis()
+                ->where('status', 'hadir')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count(),
+            'sakit' => $santriProfile->absensis()
+                ->where('status', 'sakit')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count(),
+            'izin' => $santriProfile->absensis()
+                ->where('status', 'izin')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count(),
+            'alpa' => $santriProfile->absensis()
+                ->where('status', 'alpa')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count(),
+        ];
+
+        // Total penilaian yang sudah masuk
+        $totalPenilaian = $santriProfile->penilaians()->count();
+
+        // Penilaian terbaru (5 terakhir)
+        $penilaianTerbaru = $santriProfile->penilaians()
+            ->with(['guruMapel.mapel', 'guruMapel.guruProfile'])
+            ->orderBy('tanggal', 'desc')
+            ->limit(5)
+            ->get();
+
+        // Ambil data kalender akademik bulan ini
+        $currentMonth = now()->format('Y-m');
+        $kalenderData = RencanaPembelajaran::forMonth($currentMonth)->get();
+        
+        // Format kalender untuk view (grouping by date)
+        $kalenderEvents = [];
+        foreach ($kalenderData as $item) {
+            $from = \Carbon\Carbon::parse($item->from_date);
+            $to = \Carbon\Carbon::parse($item->to_date);
+            
+            $current = $from->clone();
+            while ($current->lte($to)) {
+                $dateKey = $current->format('Y-m-d');
+                if (!isset($kalenderEvents[$dateKey])) {
+                    $kalenderEvents[$dateKey] = [];
+                }
+                $kalenderEvents[$dateKey][] = [
+                    'jenis' => $item->jenis,
+                    'judul' => $item->judul,
+                    'catatan' => $item->catatan,
+                ];
+                $current->addDay();
+            }
+        }
+
+        return view('Dashboard.Santri', compact(
+            'santriProfile', 
+            'kelas', 
+            'mapels', 
+            'absensiStats', 
+            'totalPenilaian', 
+            'penilaianTerbaru',
+            'kalenderEvents'
+        ));
     }
 
+    /**
+     * Wali dashboard.
+     */
     private function handleWaliDashboard($user)
     {
-        // Asumsi: Model Wali memiliki relasi 'santriAnak()'
-        $santriAnak = $user->santriAnak()->with('santriProfile')->get(); // Ambil data santri yang diwalikan
+        $waliProfile = $user->WaliProfile ?? null;
 
-        // Hitung total anak dan status pembayaran (contoh)
+        if (!$waliProfile) {
+            Auth::guard('wali')->logout();
+            return redirect()->route('login')->with('error', 'Profil wali tidak ditemukan.');
+        }
+
+        // Ambil santri yang menjadi anak wali
+        $santriAnak = SantriProfile::where('wali_profile_id', $waliProfile->id)
+            ->with(['santri', 'santriKelas.kelas'])
+            ->get();
+        
         $totalAnak = $santriAnak->count();
 
-        return view('dashboard.wali', compact('santriAnak', 'totalAnak'));
+        // Statistik gabungan semua anak
+        $bulanIni = now()->format('Y-m');
+        $totalAbsensiHadir = 0;
+        $totalAbsensiSakit = 0;
+        $totalAbsensiIzin = 0;
+        $totalAbsensiAlpa = 0;
+        $totalPenilaian = 0;
+
+        foreach ($santriAnak as $santri) {
+            $totalAbsensiHadir += $santri->absensis()
+                ->where('status', 'hadir')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count();
+            $totalAbsensiSakit += $santri->absensis()
+                ->where('status', 'sakit')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count();
+            $totalAbsensiIzin += $santri->absensis()
+                ->where('status', 'izin')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count();
+            $totalAbsensiAlpa += $santri->absensis()
+                ->where('status', 'alpa')
+                ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
+                ->count();
+            $totalPenilaian += $santri->penilaians()->count();
+        }
+
+        // Ambil data kalender akademik bulan ini
+        $currentMonth = now()->format('Y-m');
+        $kalenderData = RencanaPembelajaran::forMonth($currentMonth)->get();
+        
+        // Format kalender untuk view (grouping by date)
+        $kalenderEvents = [];
+        foreach ($kalenderData as $item) {
+            $from = \Carbon\Carbon::parse($item->from_date);
+            $to = \Carbon\Carbon::parse($item->to_date);
+            
+            $current = $from->clone();
+            while ($current->lte($to)) {
+                $dateKey = $current->format('Y-m-d');
+                if (!isset($kalenderEvents[$dateKey])) {
+                    $kalenderEvents[$dateKey] = [];
+                }
+                $kalenderEvents[$dateKey][] = [
+                    'jenis' => $item->jenis,
+                    'judul' => $item->judul,
+                    'catatan' => $item->catatan,
+                ];
+                $current->addDay();
+            }
+        }
+
+        return view('Dashboard.Wali', compact(
+            'waliProfile',
+            'santriAnak', 
+            'totalAnak',
+            'totalAbsensiHadir',
+            'totalAbsensiSakit',
+            'totalAbsensiIzin',
+            'totalAbsensiAlpa',
+            'totalPenilaian',
+            'kalenderEvents'
+        ));
     }
 
+    /**
+     * Web/admin dashboard.
+     */
     private function handleWebDashboard($user)
     {
-        // Logic untuk Administrator/Web
-        // Biasanya berisi statistik global: Total Guru, Total Santri, Transaksi, dll.
-        $totalGuru = \App\Models\User\Guru::count();
-        $totalSantri = Santri::count();
-        
-        return view('dashboard.web', compact('totalGuru', 'totalSantri', 'user'));
-=======
+        $totalGuru = class_exists(Guru::class) ? Guru::count() : 0;
+        $totalSantri = class_exists(Santri::class) ? Santri::count() : 0;
+
+        return view('Dashboard.Web', compact('totalGuru', 'totalSantri', 'user'));
+    }
+
+    /**
+     * Daftar santri yang diajar guru (paginated).
+     */
     public function guruSantri()
     {
         $user = Auth::guard('guru')->user();
-        $guruProfile = $user->guruProfile;
+        $guruProfile = $user->guruProfile ?? null;
+
         if (!$guruProfile) {
-            return redirect()->route('guru.dashboard')->with('error', 'Profile guru tidak ditemukan.');
+            return redirect()->route('guru.dashboard')->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        // Ambil mapel yang diajar guru
-        $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
-        $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+        // mapel ids
+        $mapelIds = GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id')->unique()->values();
+        $kelasMapels = Mapel::whereIn('id', $mapelIds)->pluck('kelas')->unique()->values()->all();
 
-        // Ambil kelas yang diajar
-        $kelasMapels = $mapels->pluck('kelas')->unique();
+        $query = SantriProfile::query();
+        if (!empty($kelasMapels)) {
+            if (SchemaHasColumn(SantriProfile::class, 'kelas')) {
+                $query->whereIn('kelas', $kelasMapels);
+            }
+        }
 
-        // Ambil santri yang ada di kelas tersebut
-        $santris = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->with('santri')->paginate(10);
+        $santris = $query->with('santri')->paginate(10);
 
-        return view('dashboard.guru-santri', compact('santris'));
+        return view('Dashboard.GuruSantri', compact('santris'));
     }
 
+    /**
+     * Daftar wali dari santri yang diajar guru (paginated).
+     */
     public function guruWali()
     {
         $user = Auth::guard('guru')->user();
-        $guruProfile = $user->guruProfile;
+        $guruProfile = $user->guruProfile ?? null;
+
         if (!$guruProfile) {
-            return redirect()->route('guru.dashboard')->with('error', 'Profile guru tidak ditemukan.');
+            return redirect()->route('guru.dashboard')->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        // Ambil mapel yang diajar guru
-        $mapelIds = \App\Models\Akademik\GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id');
-        $mapels = \App\Models\Akademik\Mapel::whereIn('id', $mapelIds)->get();
+        $mapelIds = GuruMapel::where('guru_profile_id', $guruProfile->id)->pluck('mapel_id')->unique()->values();
+        $kelasMapels = Mapel::whereIn('id', $mapelIds)->pluck('kelas')->unique()->values()->all();
 
-        // Ambil kelas yang diajar
-        $kelasMapels = $mapels->pluck('kelas')->unique();
+        $waliIds = SantriProfile::whereIn('kelas', $kelasMapels)
+                                ->whereNotNull('wali_profile_id')
+                                ->pluck('wali_profile_id')
+                                ->unique()
+                                ->values()
+                                ->all();
 
-        // Ambil wali santri yang ada di kelas tersebut
-        $waliIds = \App\Models\User\SantriProfile::whereIn('kelas', $kelasMapels)->pluck('profile_wali_id')->unique();
-        $walis = \App\Models\User\WaliProfile::whereIn('id', $waliIds)->paginate(10);
+        $walis = WaliProfile::whereIn('id', $waliIds)->paginate(10);
 
-        return view('dashboard.guru-wali', compact('walis'));
->>>>>>> f050ae17c144e6079ae8b8ec27ed5f44f35675f6
+        return view('Dashboard.GuruWali', compact('walis'));
+    }
+
+    // ---------------------------
+    // Helper functions
+    // ---------------------------
+
+    /**
+     * Normalisasi active role: jika role valid kembalikan role, jika tidak dan subRoles > 1 return 'both', dsb.
+     */
+    private function normalizeActiveRole($activeRole, $subRoles = [])
+    {
+        $subRoles = is_array($subRoles) ? $subRoles : (is_null($subRoles) ? [] : (array) $subRoles);
+
+        if ($activeRole && in_array($activeRole, $subRoles, true)) {
+            return $activeRole;
+        }
+
+        if (in_array('mts', $subRoles, true) && !in_array('ma', $subRoles, true)) {
+            return 'mts';
+        }
+
+        if (in_array('ma', $subRoles, true) && !in_array('mts', $subRoles, true)) {
+            return 'ma';
+        }
+
+        if (count($subRoles) > 1) {
+            return 'both';
+        }
+
+        return null;
+    }
+}
+
+/**
+ * Small helper: cek apakah model table punya kolom tertentu.
+ * Menggunakan Schema facade secara ringan jika ada. 
+ * Fungsi ini dibuat lokal untuk menghindari error jika Schema tidak di-import.
+ */
+function SchemaHasColumn(string $modelClass, string $column): bool
+{
+    try {
+        $model = new $modelClass;
+        $table = $model->getTable();
+        return \Illuminate\Support\Facades\Schema::hasColumn($table, $column);
+    } catch (\Throwable $e) {
+        return false;
     }
 }
