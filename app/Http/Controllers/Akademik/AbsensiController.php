@@ -16,7 +16,7 @@ class AbsensiController extends Controller
     /**
      * Display input absensi page for guru
      */
-    public function index()
+    public function index(Request $request)
     {
         $guard = $this->getGuardName();
 
@@ -34,19 +34,23 @@ class AbsensiController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level,nama_unik'])
+        // Remove nama_unik from query
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
             ->where('guru_profile_id', $guruProfile->id)
             ->get();
+            
+        $preSelectedMapelId = $request->query('guru_mapel_id');
 
-        return view('Akademik.Absensi.input', compact('guruMapels'));
+        return view('Akademik.Absensi.input', compact('guruMapels', 'preSelectedMapelId'));
     }
 
     /**
      * Get list of santri for a specific mapel/kelas
      */
-    public function getSantriByMapel($guruMapelId)
+    public function getSantriByMapel(Request $request, $guruMapelId)
     {
         $guruMapel = GuruMapel::with('kelas.santriProfile')->findOrFail($guruMapelId);
+        $date = $request->query('date');
 
         $santriList = $guruMapel->kelas?->santriProfile()
             ->select('santri_profile.id', 'santri_profile.nama', 'santris.nisn')
@@ -54,10 +58,27 @@ class AbsensiController extends Controller
             ->where('santri_profile.status', 'aktif')
             ->orderBy('santri_profile.nama')
             ->get() ?? collect([]);
+            
+        // If date is provided, fetch existing attendance
+        $existingAttendance = [];
+        if ($date) {
+            $existingAttendance = Absensi::where('mapel_id', $guruMapel->mapel_id)
+                ->where('kelas_id', $guruMapel->kelas_id)
+                ->where('tanggal', $date)
+                ->get()
+                ->keyBy('santri_profile_id')
+                ->map(function($item) {
+                    return [
+                        'status' => $item->status,
+                        'keterangan' => $item->keterangan
+                    ];
+                });
+        }
 
         return response()->json([
             'santri' => $santriList,
             'jumlahSantri' => $santriList->count(),
+            'existingAttendance' => $existingAttendance
         ]);
     }
 
@@ -81,15 +102,13 @@ class AbsensiController extends Controller
             DB::beginTransaction();
 
             foreach ($validated['absensi'] as $abs) {
-                // Map kehadiran to status
-                // Status is already in correct format (H, S, I, A)
                 $status = $abs['kehadiran'];
 
                 Absensi::updateOrCreate(
                     [
                         'santri_profile_id' => $abs['id'],
                         'tanggal' => $tanggal,
-                        'mapel_id' => $guruMapel->mapel_id, // Add mapel_id to condition
+                        'mapel_id' => $guruMapel->mapel_id,
                     ],
                     [
                         'kelas_id' => $guruMapel->kelas_id,
@@ -110,6 +129,35 @@ class AbsensiController extends Controller
             DB::rollback();
             return response()->json([
                 'message' => 'Gagal menyimpan absensi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reset absensi for a specific date and mapel
+     */
+    public function resetAbsensi(Request $request)
+    {
+        $request->validate([
+            'guru_mapel_id' => 'required|exists:guru_mapel,id',
+            'tanggal' => 'required|date',
+        ]);
+
+        $guruMapel = GuruMapel::findOrFail($request->guru_mapel_id);
+
+        try {
+            $deleted = Absensi::where('mapel_id', $guruMapel->mapel_id)
+                ->where('kelas_id', $guruMapel->kelas_id)
+                ->where('tanggal', $request->tanggal)
+                ->delete();
+
+            return response()->json([
+                'message' => 'Data absensi berhasil direset.',
+                'deleted_count' => $deleted
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal mereset absensi: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -139,20 +187,12 @@ class AbsensiController extends Controller
         $user = auth('guru')->user();
         $guruProfile = $user->guruProfile;
         
-        $jabatan = strtolower($guruProfile->jabatan ?? '');
-        $isWakaOrKepsek = in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka']);
+        // Remove nama_unik from query
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
+            ->where('guru_profile_id', $guruProfile->id)
+            ->get();
 
-        if ($isWakaOrKepsek) {
-            // Waka/Kepsek bisa melihat semua kelas
-            $kelasList = Kelas::orderBy('level')->get();
-        } else {
-            // Guru biasa hanya melihat kelas yang diajar
-            $kelasList = Kelas::whereHas('guruMapels', function($q) use ($guruProfile) {
-                $q->where('guru_profile_id', $guruProfile->id);
-            })->orderBy('level')->get();
-        }
-
-        return view('Akademik.Absensi.rekap', compact('kelasList'));
+        return view('Akademik.Rekap.Kehadiran.index', compact('guruMapels'));
     }
 
     /**
@@ -161,6 +201,7 @@ class AbsensiController extends Controller
     public function getRekapData(Request $request)
     {
         $kelasId = $request->kelas_id;
+        $mapelId = $request->mapel_id;
         $bulan = $request->bulan; // Format: YYYY-MM
 
         if (!$kelasId || !$bulan) {
@@ -185,9 +226,14 @@ class AbsensiController extends Controller
         // Get attendance data
         $students = [];
         foreach ($santriList as $santri) {
-            $attendanceRecords = Absensi::where('santri_profile_id', $santri->id)
-                ->whereBetween('tanggal', [$startDate, $endDate])
-                ->get()
+            $query = Absensi::where('santri_profile_id', $santri->id)
+                ->whereBetween('tanggal', [$startDate, $endDate]);
+            
+            if ($mapelId) {
+                $query->where('mapel_id', $mapelId);
+            }
+
+            $attendanceRecords = $query->get()
                 ->keyBy(function($item) {
                     return (int) date('j', strtotime($item->tanggal)); // Day of month
                 });
@@ -207,9 +253,9 @@ class AbsensiController extends Controller
             }
 
             // Calculate percentage
+            $totalPertemuan = array_sum($summary);
             $totalHadir = $summary['H'];
-            $totalDays = $daysInMonth;
-            $persentase = $totalDays > 0 ? round(($totalHadir / $totalDays) * 100, 1) : 0;
+            $persentase = $totalPertemuan > 0 ? round(($totalHadir / $totalPertemuan) * 100, 1) : 0;
 
             $students[] = [
                 'id' => $santri->id,

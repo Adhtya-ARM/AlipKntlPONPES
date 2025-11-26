@@ -173,6 +173,58 @@
         </div>
     </section>
 
+    {{-- Struktur Organisasi Section --}}
+    <section id="struktur" class="py-20 bg-gradient-to-b from-gray-50 to-white">
+        <div class="container mx-auto px-6">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h4 class="text-green-600 font-semibold mb-2 uppercase tracking-wider">Struktur Organisasi</h4>
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Pimpinan & Pengajar</h2>
+                <p class="text-gray-600">Mengenal lebih dekat para pemimpin dan pengajar yang berdedikasi untuk pendidikan berkualitas.</p>
+            </div>
+
+            @if($struktur->isEmpty())
+                <div class="text-center text-gray-500 py-16 bg-white rounded-2xl shadow-sm">
+                    <i class="fas fa-users text-gray-300 text-6xl mb-4"></i>
+                    <p class="text-lg">Data struktur organisasi belum tersedia.</p>
+                </div>
+            @else
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                    @foreach($struktur as $guru)
+                    <div class="group">
+                        <div class="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden transform hover:-translate-y-2">
+                            <!-- Photo Container -->
+                            <div class="aspect-square overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50">
+                                @if($guru->foto)
+                                    <img src="{{ asset('storage/' . $guru->foto) }}" 
+                                         alt="{{ $guru->nama }}" 
+                                         class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
+                                @else
+                                    <img src="https://ui-avatars.com/api/?name={{ urlencode($guru->nama) }}&background=10b981&color=fff&bold=true&size=300" 
+                                         alt="{{ $guru->nama }}" 
+                                         class="w-full h-full object-cover">
+                                @endif
+                            </div>
+                            
+                            <!-- Info -->
+                            <div class="p-4 text-center">
+                                <h3 class="font-bold text-gray-900 text-sm mb-1 line-clamp-2 leading-tight">{{ $guru->nama }}</h3>
+                                <p class="text-green-600 text-xs font-medium line-clamp-1">{{ $guru->jabatan }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+
+                <!-- Additional Info -->
+                <div class="mt-12 text-center">
+                    <p class="text-sm text-gray-500">
+                        Didukung oleh <strong>{{ $struktur->count() }}</strong> tenaga pendidik dan kependidikan yang berpengalaman
+                    </p>
+                </div>
+            @endif
+        </div>
+    </section>
+
     {{-- Programs Section --}}
     <section id="program" class="py-20 bg-gray-50">
         <div class="container mx-auto px-6">

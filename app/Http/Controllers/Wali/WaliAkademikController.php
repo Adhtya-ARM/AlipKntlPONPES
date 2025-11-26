@@ -43,10 +43,10 @@ class WaliAkademikController extends Controller
             }
 
             $stats = [
-                'hadir' => $santri->absensis()->where('status', 'hadir')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
-                'sakit' => $santri->absensis()->where('status', 'sakit')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
-                'izin' => $santri->absensis()->where('status', 'izin')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
-                'alpa' => $santri->absensis()->where('status', 'alpa')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
+                'hadir' => $santri->absensis()->where('status', 'H')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
+                'sakit' => $santri->absensis()->where('status', 'S')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
+                'izin' => $santri->absensis()->where('status', 'I')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
+                'alpa' => $santri->absensis()->where('status', 'A')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
             ];
 
             $absensiList = $santri->absensis()

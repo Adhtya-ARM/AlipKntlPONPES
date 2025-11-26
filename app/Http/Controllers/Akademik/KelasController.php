@@ -8,29 +8,24 @@ use App\Models\User\SantriProfile;
 use App\Models\User\GuruProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class KelasController extends Controller
 {
-    /**
-     * Display kelas management page
-     */
     public function index()
     {
         $kelas = Kelas::with(['waliKelas:id,nama'])
             ->withCount(['santriProfile', 'guruMapels'])
             ->orderBy('level')
-            ->orderBy('nama_unik')
             ->get()
             ->map(function ($item) {
                 $item->is_locked = $item->guru_mapels_count > 0;
-                $item->nama_display = "Kelas {$item->level} {$item->nama_unik}";
+                $item->nama_display = "Kelas {$item->level}";
+                $item->wali_kelas_id = $item->guru_profile_id;
                 return $item;
             });
 
-        // Summary by jurusan
-        $summary = $kelas->groupBy(function($item) {
-            return $item->nama_unik; // Group by jurusan (TITL, TKR, etc)
-        })->map(function($group) {
+        $summary = $kelas->groupBy('level')->map(function($group) {
             return $group->count();
         });
 
@@ -45,20 +40,13 @@ class KelasController extends Controller
         ]);
     }
 
-    /**
-     * Store new kelas
-     */
-    /**
-     * Store new kelas
-     */
     public function store(Request $request)
     {
         $this->authorizeManagement();
 
         $validated = $request->validate([
             'level' => 'required|integer|in:7,8,9,10,11,12',
-            'nama_unik' => 'required|string|max:50',
-            'wali_kelas_id' => 'nullable|exists:guru_profile,id',
+            'guru_profile_id' => 'nullable|exists:guru_profile,id',
         ]);
 
         Kelas::create($validated);
@@ -66,38 +54,33 @@ class KelasController extends Controller
         return response()->json(['message' => 'Kelas berhasil ditambahkan.'], 201);
     }
 
-    /**
-     * Update kelas
-     */
     public function update(Request $request, Kelas $kelas)
     {
         $this->authorizeManagement();
 
         $validated = $request->validate([
-            'level' => 'required|integer|in:7,8,9,10,11,12',
-            'nama_unik' => 'required|string|max:50',
-            'wali_kelas_id' => 'nullable|exists:guru_profile,id',
+            'level' => 'nullable|integer|in:7,8,9,10,11,12',
+            'guru_profile_id' => 'nullable|exists:guru_profile,id',
         ]);
-
-        // Restriction removed to allow fixing typos in class names/levels
-        // if ($kelas->guruMapels()->exists()) { ... }
-
-        \Illuminate\Support\Facades\Log::info('Updating Kelas', ['id' => $kelas->id, 'request' => $request->all(), 'validated' => $validated]);
-
-        $updated = $kelas->update($validated);
+    
+        if (isset($validated['level'])) {
+            $kelas->level = $validated['level'];
+        }
+        if (array_key_exists('guru_profile_id', $validated)) {
+            $kelas->guru_profile_id = $validated['guru_profile_id'];
+            
+        }
         
-        \Illuminate\Support\Facades\Log::info('Kelas Updated', ['updated' => $updated, 'fresh' => $kelas->fresh()]);
-
+        $kelas->save();
+        $kelas = $kelas->fresh(['waliKelas:id,nama']);
+        $kelas->wali_kelas_id = $kelas->guru_profile_id;
+    
         return response()->json([
             'message' => 'Kelas berhasil diperbarui.',
-            'debug_validated' => $validated,
-            'debug_fresh' => $kelas->fresh()
+            'kelas' => $kelas
         ]);
     }
 
-    /**
-     * Delete kelas
-     */
     public function destroy(Kelas $kelas)
     {
         $this->authorizeManagement();
@@ -119,12 +102,9 @@ class KelasController extends Controller
         return response()->json(['message' => 'Kelas berhasil dihapus.']);
     }
 
-    /**
-     * Helper to authorize management actions
-     */
     private function authorizeManagement()
     {
-        $user = \Illuminate\Support\Facades\Auth::guard('guru')->user();
+        $user = Auth::guard('guru')->user();
         if (!$user || !$user->guruProfile) {
             abort(403, 'Unauthorized');
         }
@@ -135,9 +115,6 @@ class KelasController extends Controller
         }
     }
 
-    /**
-     * Get santri for a kelas
-     */
     public function getSiswa($kelasId)
     {
         $kelas = Kelas::with('santriProfile:id,nama')->findOrFail($kelasId);
@@ -152,7 +129,20 @@ class KelasController extends Controller
             ->whereNotIn('santri_profile.id', $santriSudahPunyaKelas)
             ->where('santri_profile.status', 'aktif')
             ->orderBy('santri_profile.nama')
-            ->get();
+            ->get()
+            ->map(function ($student) use ($kelasId) {
+                $hasAbsensi = DB::table('absensis')
+                    ->where('santri_profile_id', $student->id)
+                    ->where('kelas_id', $kelasId)
+                    ->exists();
+                
+                $hasPenilaian = DB::table('penilaians')
+                    ->where('santri_profile_id', $student->id)
+                    ->exists();
+                
+                $student->has_relations = $hasAbsensi || $hasPenilaian;
+                return $student;
+            });
 
         $terpilih = $kelas->santriProfile->pluck('id')->toArray();
 
@@ -162,20 +152,15 @@ class KelasController extends Controller
         ]);
     }
 
-    /**
-     * Update santri in kelas
-     */
     public function updateSiswa(Request $request, $kelasId)
     {
         $kelas = Kelas::findOrFail($kelasId);
 
-        // Validasi input
         $santriIds = $request->input('santri_ids', []);
         if (!is_array($santriIds)) {
             $santriIds = [];
         }
 
-        // Pastikan santri yang dipilih valid dan tidak sedang di kelas lain (double check)
         $santriSudahPunyaKelas = DB::table('santri_kelas')
             ->where('kelas_id', '!=', $kelasId)
             ->pluck('santri_profile_id')
@@ -186,8 +171,6 @@ class KelasController extends Controller
             ->pluck('id')
             ->toArray();
 
-        // Sync data siswa ke kelas (update tabel pivot santri_kelas)
-        // Menggunakan sync akan menghapus yang tidak ada di array dan menambahkan yang baru
         $kelas->santriProfile()->sync($validIds);
 
         return response()->json(['message' => 'Daftar santri kelas berhasil diperbarui.']);

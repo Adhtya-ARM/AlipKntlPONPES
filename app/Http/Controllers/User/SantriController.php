@@ -25,8 +25,10 @@ public function index(Request $request)
 {
     // 1. Mulai Query Builder
     $query = Santri::with([
-        "santriprofile.waliProfile",
-        "santriprofile.santriKelas.kelas",
+        "santriprofile" => function($q) {
+            $q->with(['waliProfile', 'santriKelas.kelas'])
+              ->withCount(['absensis', 'penilaians']);
+        }
     ]);
 
     // 2. Logika Filter Kelas
@@ -64,7 +66,7 @@ public function index(Request $request)
         ->get()
         ->map(fn($k) => ["id" => $k->id, "nama" => (string)$k->level]);
 
-    return view("User.Santri.index", compact("santris", "statuses", "walis", "kelas"));
+    return view("User.Management.Santri.index", compact("santris", "statuses", "walis", "kelas"));
 }
 
 // ---------------------------------------------------------------------
@@ -85,7 +87,7 @@ public function index(Request $request)
         // 1. Validasi Input
         $validatedData = $request->validate([
             "username" => "required|string|unique:santris,username|max:50",
-            "password" => "required|string|min:8|confirmed",
+            "password" => "required|string|min:8", // Hapus confirmed
             "nisn" => "required|string|unique:santris,nisn|max:20",
 
             // Data Profile Santri
@@ -93,6 +95,7 @@ public function index(Request $request)
             "alamat" => "nullable|string|max:255",
             "no_hp" => "nullable|string|max:20",
             "wali_profile_id" => "nullable|exists:wali_profile,id",
+            "kelas_id" => "nullable|exists:kelas,id", // Tambahkan validasi kelas_id saat create
         ]);
 
         // 2. Gunakan DB Transaction
@@ -107,32 +110,34 @@ public function index(Request $request)
             ]);
 
             // B. Simpan data ke tabel SantriProfile
-            $santri->santriProfile()->create([
+            $profile = $santri->santriProfile()->create([
                 "nama" => $validatedData["nama"],
                 "alamat" => $validatedData["alamat"] ?? null,
                 "no_hp" => $validatedData["no_hp"] ?? null,
                 "wali_profile_id" => $validatedData["wali_profile_id"] ?? null,
+                "status" => 'aktif', // Default active
             ]);
+
+            // C. Assign Kelas jika ada
+            if (!empty($validatedData["kelas_id"])) {
+                $profile->santriKelas()->create([
+                    'kelas_id' => $validatedData["kelas_id"]
+                ]);
+            }
 
             DB::commit();
 
-            return redirect()
-                ->route("santri.index")
-                ->with("success", "Data Santri **" . $validatedData["nama"] . "** berhasil ditambahkan!");
+            return response()->json(['message' => "Data Santri **" . $validatedData["nama"] . "** berhasil ditambahkan!"], 200);
+
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with("error", "Gagal menyimpan data Santri. Detail: " . $e->getMessage());
+            return response()->json(['message' => "Gagal menyimpan data Santri. Detail: " . $e->getMessage()], 500);
         }
     }
 
 // ---------------------------------------------------------------------
 // UPDATE (Edit Data)
 // ---------------------------------------------------------------------
-    /**
-     * Perbarui data santri di database (UPDATE - Store).
-     */
     /**
      * Perbarui data santri di database (UPDATE - Store).
      */
@@ -153,7 +158,7 @@ public function index(Request $request)
                 "max:50",
                 Rule::unique('santris')->ignore($santri->id),
             ],
-            "password" => "nullable|string|min:8|confirmed",
+            "password" => "nullable|string|min:8", // Hapus confirmed
             "nisn" => [
                 "required",
                 "string",
@@ -196,36 +201,31 @@ public function index(Request $request)
             ]);
 
             // C. Update data Kelas (SantriKelas)
-            if (!empty($validatedData["kelas_id"])) {
-                // Cek apakah sudah ada data kelas
-                $santriKelas = $santri->santriProfile->santriKelas;
-                
-                if ($santriKelas) {
-                    // Update jika ada
-                    $santriKelas->update([
-                        'kelas_id' => $validatedData["kelas_id"]
-                    ]);
+            // Cek apakah kelas dikunci (ada relasi)
+            $isLocked = $santri->santriProfile->absensis()->exists() || $santri->santriProfile->penilaians()->exists();
+            
+            if (!$isLocked) {
+                if (!empty($validatedData["kelas_id"])) {
+                    $santriKelas = $santri->santriProfile->santriKelas;
+                    
+                    if ($santriKelas) {
+                        $santriKelas->update(['kelas_id' => $validatedData["kelas_id"]]);
+                    } else {
+                        $santri->santriProfile->santriKelas()->create(['kelas_id' => $validatedData["kelas_id"]]);
+                    }
                 } else {
-                    // Buat baru jika belum ada
-                    $santri->santriProfile->santriKelas()->create([
-                        'kelas_id' => $validatedData["kelas_id"]
-                    ]);
+                    // Jika kelas_id dikosongkan, hapus relasi kelas
+                     $santri->santriProfile->santriKelas()->delete();
                 }
-            } else {
-                // Jika kelas_id kosong/null, hapus relasi kelas jika ada (opsional, tergantung kebutuhan)
-                // $santri->santriProfile->santriKelas()->delete();
             }
 
             DB::commit();
 
-            return redirect()
-                ->route("santri.index")
-                ->with("success", "Data Santri **" . $validatedData["nama"] . "** berhasil diperbarui!");
+            return response()->json(['message' => "Data Santri **" . $validatedData["nama"] . "** berhasil diperbarui!"], 200);
+
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with("error", "Gagal memperbarui data Santri. Detail: " . $e->getMessage());
+            return response()->json(['message' => "Gagal memperbarui data Santri. Detail: " . $e->getMessage()], 500);
         }
     }
 
@@ -244,9 +244,14 @@ public function index(Request $request)
             abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
         }
 
+        // Cek Relasi
+        $profile = $santri->santriprofile;
+        if ($profile && ($profile->absensis()->exists() || $profile->penilaians()->exists())) {
+            return response()->json(['message' => 'Gagal menghapus! Santri memiliki data absensi atau penilaian terkait.'], 422);
+        }
+
         DB::beginTransaction();
         try {
-            $profile = $santri->santriprofile;
             $nama = $profile->nama ?? "Santri";
 
             if ($profile) {
@@ -257,15 +262,10 @@ public function index(Request $request)
             $santri->delete(); 
             DB::commit();
 
-            return redirect()
-                ->route("santri.index")
-                ->with("success", "Data santri {$nama} berhasil dihapus!");
+            return response()->json(['message' => "Data santri {$nama} berhasil dihapus!"], 200);
         } catch (\Throwable $e) {
             DB::rollBack();
-            return back()->with(
-                "error",
-                "Gagal menghapus data santri. " . $e->getMessage(),
-            );
+            return response()->json(['message' => "Gagal menghapus data santri. " . $e->getMessage()], 500);
         }
     }
 }

@@ -14,13 +14,12 @@ use App\Models\User\WaliProfile;
 
 class WaliController extends Controller
 {
-    /**
-     * Tampilkan daftar semua wali (READ - All).
-     */
     public function index(Request $request)
     {
         // 1. Mulai Query Builder
-        $query = Wali::with("waliProfile");
+        $query = Wali::with(["waliProfile" => function($q) {
+            $q->withCount('santriProfiles');
+        }]);
 
         // 2. Logika Pencarian
         if ($request->filled('search')) {
@@ -37,12 +36,9 @@ class WaliController extends Controller
         $walis = $query->paginate(10);
 
         // 4. Kirim ke view
-        return view("User.WaliMurid.index", compact("walis"));
+        return view("User.Management.Wali.index", compact("walis"));
     }
 
-    /**
-     * Simpan data wali baru ke database (CREATE - Store).
-     */
     public function store(Request $request)
     {
         // Cek Permission Waka/Kepsek
@@ -55,7 +51,7 @@ class WaliController extends Controller
         // 1. Validasi Input
         $validatedData = $request->validate([
             "username" => "required|string|unique:wali,username|unique:guru,username|max:50",
-            "password" => "required|string|min:8|confirmed",
+            "password" => "required|string|min:8", // Hapus confirmed
 
             // Data Profile Wali
             "nama" => "required|string|max:255",
@@ -82,14 +78,11 @@ class WaliController extends Controller
 
             DB::commit();
 
-            return redirect()
-                ->route("wali.index")
-                ->with("success", "Data Wali **" . $validatedData["nama"] . "** berhasil ditambahkan!");
+            return response()->json(['message' => "Data Wali **" . $validatedData["nama"] . "** berhasil ditambahkan!"], 200);
+
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with("error", "Gagal menyimpan data Wali. Detail: " . $e->getMessage());
+            return response()->json(['message' => "Gagal menyimpan data Wali. Detail: " . $e->getMessage()], 500);
         }
     }
 
@@ -113,7 +106,7 @@ class WaliController extends Controller
                 "max:50",
                 // FIX: Tidak ada validasi unique saat update
             ],
-            "password" => "nullable|string|min:8|confirmed",
+            "password" => "nullable|string|min:8", // Hapus confirmed
 
             // Data Profile Wali
             "nama" => "required|string|max:255",
@@ -145,14 +138,11 @@ class WaliController extends Controller
 
             DB::commit();
 
-            return redirect()
-                ->route("wali.index")
-                ->with("success", "Data Wali **" . $validatedData["nama"] . "** berhasil diperbarui!");
+            return response()->json(['message' => "Data Wali **" . $validatedData["nama"] . "** berhasil diperbarui!"], 200);
+
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with("error", "Gagal memperbarui data Wali. Detail: " . $e->getMessage());
+            return response()->json(['message' => "Gagal memperbarui data Wali. Detail: " . $e->getMessage()], 500);
         }
     }
 
@@ -167,7 +157,14 @@ class WaliController extends Controller
         if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
             abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
         }
-        $nama = $wali->waliProfile->nama ?? "Wali";
+        
+        // Cek Relasi
+        $profile = $wali->waliProfile;
+        if ($profile && $profile->santriProfiles()->exists()) {
+            return response()->json(['message' => 'Gagal menghapus! Wali ini masih memiliki santri terkait.'], 422);
+        }
+
+        $nama = $profile->nama ?? "Wali";
 
         try {
             DB::beginTransaction();
@@ -182,12 +179,10 @@ class WaliController extends Controller
 
             DB::commit();
 
-            return redirect()
-                ->route("wali.index")
-                ->with("success", "Data Wali **" . $nama . "** berhasil dihapus!");
+            return response()->json(['message' => "Data Wali **" . $nama . "** berhasil dihapus!"], 200);
         } catch (\Exception $e) {
             DB::rollback();
-            return back()->with("error", "Gagal menghapus data Wali. Detail: " . $e->getMessage());
+            return response()->json(['message' => "Gagal menghapus data Wali. Detail: " . $e->getMessage()], 500);
         }
     }
 }

@@ -15,24 +15,54 @@ use App\Models\User\SantriProfile;
 class GuruMapelController extends Controller
 {
     /**
-     * Tampilkan halaman pemilihan mapel untuk guru
+     * Tampilkan halaman pemilihan mapel untuk guru dengan data lengkap
      */
     public function index()
     {
         $guru = Auth::guard('guru')->user();
         
-        // Ambil mapel yang sudah dipilih guru
-        $guruMapels = GuruMapel::with(['mapel', 'kelas'])
+        // Ambil mapel yang sudah dipilih guru dengan informasi lengkap
+        $guruMapels = GuruMapel::with(['mapel', 'kelas.santriProfile'])
             ->where('guru_profile_id', $guru->id)
             ->get();
+        
+        // Hitung statistik untuk setiap mapel
+        $guruMapels = $guruMapels->map(function($gm) {
+            // Hitung jumlah siswa aktif
+            $jumlahSiswa = $gm->kelas->santriProfile()
+                ->where('status', 'aktif')
+                ->count();
+            
+            // Hitung jumlah pertemuan (absensi yang sudah diinput)
+            $jumlahPertemuan = Absensi::where('mapel_id', $gm->mapel_id)
+                ->where('kelas_id', $gm->kelas_id)
+                ->distinct('tanggal')
+                ->count('tanggal');
+            
+            // Hitung rata-rata nilai
+            $rataRataNilai = Penilaian::where('guru_mapel_id', $gm->id)
+                ->avg('nilai');
+            
+            // Hitung jumlah siswa yang sudah dinilai
+            $siswaDinilai = Penilaian::where('guru_mapel_id', $gm->id)
+                ->distinct('santri_profile_id')
+                ->count('santri_profile_id');
+            
+            $gm->jumlah_siswa = $jumlahSiswa;
+            $gm->jumlah_pertemuan = $jumlahPertemuan;
+            $gm->rata_rata_nilai = $rataRataNilai ? round($rataRataNilai, 1) : null;
+            $gm->siswa_dinilai = $siswaDinilai;
+            
+            return $gm;
+        });
         
         // Ambil semua mapel untuk dropdown
         $mapels = Mapel::orderBy('nama_mapel')->get();
         
         // Ambil semua kelas untuk dropdown
-        $kelas = Kelas::orderBy('level')->orderBy('nama_unik')->get();
+        $kelas = Kelas::orderBy('level')->get();
         
-        return view('Akademik.guru-mapel.index', compact('guruMapels', 'mapels', 'kelas'));
+        return view('User.Guru.MapelSaya.index', compact('guruMapels', 'mapels', 'kelas'));
     }
 
     /**
@@ -49,7 +79,7 @@ class GuruMapelController extends Controller
 
         $guru = Auth::guard('guru')->user();
 
-        // Cek apakah sudah ada
+        // Cek apakah sudah ada kombinasi mapel + kelas yang sama
         $exists = GuruMapel::where('guru_profile_id', $guru->id)
             ->where('mapel_id', $validated['mapel_id'])
             ->where('kelas_id', $validated['kelas_id'])
@@ -77,9 +107,6 @@ class GuruMapelController extends Controller
         ], 201);
     }
 
-    /**
-     * Hapus mapel yang diajar guru
-     */
     public function destroy(GuruMapel $guruMapel)
     {
         $guru = Auth::guard('guru')->user();
@@ -94,7 +121,7 @@ class GuruMapelController extends Controller
         // Cek apakah sudah ada penilaian
         if ($guruMapel->penilaians()->count() > 0) {
             return response()->json([
-                'message' => 'Tidak dapat dihapus karena sudah ada penilaian'
+                'message' => 'Tidak dapat dihapus karena sudah ada penilaian. Silakan hapus penilaian terlebih dahulu.'
             ], 400);
         }
 
@@ -102,6 +129,27 @@ class GuruMapelController extends Controller
 
         return response()->json([
             'message' => 'Mapel berhasil dihapus'
+        ]);
+    }
+
+    /**
+     * Hapus semua penilaian untuk mapel ini
+     */
+    public function clearGrades(GuruMapel $guruMapel)
+    {
+        $guru = Auth::guard('guru')->user();
+
+        if ($guruMapel->guru_profile_id != $guru->id) {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        $count = $guruMapel->penilaians()->count();
+        $guruMapel->penilaians()->delete();
+
+        return response()->json([
+            'message' => "Berhasil menghapus $count data penilaian."
         ]);
     }
 
@@ -123,7 +171,7 @@ class GuruMapelController extends Controller
             })
             ->with([
                 'kelasAktif.kelas',
-                'santri', // Eager load santri for NIS
+                'santri', 
                 'penilaians' => function($q) use ($guruMapelId) {
                     $q->where('guru_mapel_id', $guruMapelId);
                 },
@@ -153,9 +201,6 @@ class GuruMapelController extends Controller
 
             // Ambil nilai
             $penilaians = $s->penilaians;
-            
-            // Calculate averages
-            // Tugas includes: Tugas, UH, Praktek
             $tugasGrades = $penilaians->filter(function($p) {
                 return in_array($p->jenis_penilaian, ['Tugas', 'UH', 'Praktek']);
             });

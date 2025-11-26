@@ -18,8 +18,7 @@
                 </p>
             </div>
 
-            {{-- === FORM LOGIN (tampil ketika tidak sedang menampilkan role picker) === --}}
-            @if(empty($showRolePicker))
+            {{-- === FORM LOGIN UTAMA (TIDAK ADA ROLE PICKER) === --}}
             <form method="POST" action="{{ route('login') }}" class="space-y-6" autocomplete="off">
                 @csrf 
                 
@@ -77,50 +76,6 @@
                     </button>
                 </div>
             </form>
-            @endif
-
-            {{-- === ROLE PICKER (submit ke POST /login untuk single-endpoint flow) === --}}
-            @if(!empty($showRolePicker) && isset($subRoles) && count($subRoles))
-                <div class="mt-6 p-4 bg-white/80 rounded-lg border border-gray-200 shadow-sm">
-                    <h3 class="text-sm font-semibold text-gray-800 mb-3 text-center">Pilih Sub-Role Anda</h3>
-
-                    @php
-                        $userName = optional(Auth::user())->name ?? session('auth_user_name') ?? null;
-                    @endphp
-
-                    @if($userName)
-                        <p class="text-center text-xs text-gray-600 mb-4">Masuk sebagai <span class="font-medium">{{ $userName }}</span></p>
-                    @endif
-
-                    <form method="POST" action="{{ route('login') }}" class="space-y-3">
-                        @csrf
-                        @foreach($subRoles as $role)
-                            <button type="submit" name="role" value="{{ $role }}"
-                                class="w-full py-2 px-4 text-sm font-medium rounded-lg shadow-sm text-white
-                                @if($role === 'mts') bg-blue-600 hover:bg-blue-700 @else bg-green-600 hover:bg-green-700 @endif
-                                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition">
-                                Masuk sebagai {{ strtoupper($role) }}
-                            </button>
-                        @endforeach
-
-                        @if(count($subRoles) > 1)
-                            <button type="submit" name="role" value="both"
-                                class="w-full py-2 px-4 text-sm font-medium rounded-lg border border-gray-300 text-gray-800 bg-white hover:bg-gray-100 transition">
-                                Gabungan (MTS &amp; MA)
-                            </button>
-                        @endif
-                    </form>
-
-                    <div class="mt-4 text-center">
-                        <form method="POST" action="{{ route('logout', ['guard' => session('auth_guard', 'guru')]) }}">
-                            @csrf
-                            <button type="submit" class="text-sm text-gray-700 hover:text-red-500 transition">
-                                Batal / Kembali ke Login
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            @endif
 
             <p class="mt-8 text-center text-xs text-gray-700">
                 &copy; {{ date('Y') }} Ponpes Al-Madinah.

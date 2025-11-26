@@ -9,7 +9,7 @@ use App\Modes\User\Wali;
 class WaliProfile extends Model
 {
     protected $table = "wali_profile";
-    protected $fillable = ["wali_id", "nama", "no_hp", "alamat"];
+    protected $fillable = ["wali_id", "nama", "no_hp", "alamat", "foto"];
 
     public function santri()
     {

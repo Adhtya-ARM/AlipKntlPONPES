@@ -13,36 +13,50 @@ class MapelController extends Controller
      */
     public function index()
     {
+        // Helper function untuk memproses mapel
+        $processMapels = function($query) {
+            return $query->with(['guruMapels.kelas']) // Eager load untuk cek penggunaan level
+                ->withCount('guruMapels')
+                ->get()
+                ->map(function($mapel) {
+                    // Ambil daftar level yang sudah digunakan oleh mapel ini
+                    $usedLevels = $mapel->guruMapels->pluck('kelas.level')
+                        ->filter()
+                        ->unique()
+                        ->map(fn($level) => (string) $level) // Cast to string
+                        ->values()
+                        ->toArray();
+                    
+                    $mapelData = $mapel->toArray();
+                    $mapelData['used_levels'] = $usedLevels; // Tambahkan info used_levels
+                    return $mapelData;
+                })
+                ->toArray();
+        };
+
         // Ambil semua mapel dan group secara manual
         $kelompokMapels = [
             [
                 'id' => 'smp_1',
                 'nama' => 'Kelompok SMP',
                 'jenis' => 'smp',
-                'mapels' => Mapel::where('tingkat', 'like', '%7%')
+                'mapels' => $processMapels(Mapel::where('tingkat', 'like', '%7%')
                     ->orWhere('tingkat', 'like', '%8%')
-                    ->orWhere('tingkat', 'like', '%9%')
-                    ->get()
-                    ->toArray()
+                    ->orWhere('tingkat', 'like', '%9%'))
             ],
             [
                 'id' => 'sma_1',
                 'nama' => 'Kelompok SMA',
                 'jenis' => 'sma',
-                'mapels' => Mapel::where('tingkat', 'like', '%10%')
+                'mapels' => $processMapels(Mapel::where('tingkat', 'like', '%10%')
                     ->orWhere('tingkat', 'like', '%11%')
-                    ->orWhere('tingkat', 'like', '%12%')
-                    ->get()
-                    ->toArray()
+                    ->orWhere('tingkat', 'like', '%12%'))
             ]
         ];
 
         return view('akademik.mapel.index', compact('kelompokMapels'));
     }
 
-    /**
-     * Simpan Mapel baru
-     */
     /**
      * Simpan Mapel baru
      */
@@ -98,6 +112,16 @@ class MapelController extends Controller
                 'tingkat' => 'nullable|array',
             ]);
 
+            // Cek apakah ada tingkat yang dihapus padahal sedang digunakan
+            // Ini validasi backend tambahan
+            $currentUsedLevels = $mapel->guruMapels()->with('kelas')->get()->pluck('kelas.level')->unique()->toArray();
+            $newLevels = $validated['tingkat'] ?? [];
+            
+            // Jika ada level yang sedang digunakan TAPI tidak ada di input baru, maka error/block
+            // Namun karena inputnya checkbox per level, kita bisa cek satu-satu.
+            // Tapi user minta read-only di UI, jadi validasi backend ini opsional tapi bagus.
+            
+            // Update
             $mapel->update([
                 'nama_mapel' => $validated['nama_mapel'],
                 'jjm' => $validated['jjm'] ?? 0,

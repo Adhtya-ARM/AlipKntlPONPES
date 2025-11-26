@@ -10,7 +10,6 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\User\SantriController;
 use App\Http\Controllers\User\WaliController;
 use App\Http\Controllers\User\GuruController;
-use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\GuruAkademikController;
 
 // === AKADEMIK CONTROLLERS ===
@@ -20,6 +19,7 @@ use App\Http\Controllers\Akademik\KelasController;
 use App\Http\Controllers\Akademik\MapelController;
 use App\Http\Controllers\Akademik\GuruMapelController;
 use App\Http\Controllers\Akademik\RencanaPembelajaranController;
+use App\Http\Controllers\Akademik\JadwalPelajaranController;
 
 // === SANTRI & WALI CONTROLLERS ===
 use App\Http\Controllers\Santri\SantriAkademikController;
@@ -41,9 +41,9 @@ Route::post('/logout/{guard}', [AuthController::class, 'logout'])->name('logout'
 // ======================================
 // 🧭 DASHBOARD PER ROLE
 // ======================================
-Route::middleware('auth:web')->prefix('admin')->group(function () {
+Route::middleware('auth:guru')->prefix('admin')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
-        ->name('admin.dashboard')->defaults('guard', 'web');
+        ->name('admin.dashboard')->defaults('guard', 'guru');
 });
 
 Route::middleware('auth:guru')->prefix('guru')->group(function () {
@@ -99,6 +99,7 @@ Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(f
     Route::post('guru-mapel', [GuruMapelController::class, 'store'])->name('guru-mapel.store');
     Route::delete('guru-mapel/{guruMapel}', [GuruMapelController::class, 'destroy'])->name('guru-mapel.destroy');
     Route::get('guru-mapel/{guruMapel}/rekap', [GuruMapelController::class, 'rekap'])->name('guru-mapel.rekap');
+    Route::delete('guru-mapel/{guruMapel}/clear-grades', [GuruMapelController::class, 'clearGrades'])->name('guru-mapel.clear-grades');
 
     //---- Kelas ---//
        Route::get('kelas/{kelas}/siswa', [KelasController::class, 'getSiswa'])->name('kelas.siswa');
@@ -109,10 +110,19 @@ Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(f
       Route::get('absensi', [AbsensiController::class, 'index'])->name('absensi.index');
       Route::get('absensi/{guruMapelId}/santri', [AbsensiController::class, 'getSantriByMapel'])->name('absensi.getSantri');
       Route::post('absensi/store', [AbsensiController::class, 'store'])->name('absensi.store');
+      Route::post('absensi/reset', [AbsensiController::class, 'resetAbsensi'])->name('absensi.reset');
 
     // --- Rekap Kehadiran ---
       Route::get('rekap-kehadiran', [AbsensiController::class, 'rekap'])->name('rekap-kehadiran.index');
       Route::get('rekap-kehadiran/data', [AbsensiController::class, 'getRekapData'])->name('rekap-kehadiran.getData');
+
+    // --- Jadwal Pelajaran (Kepsek/Waka only for CRUD) ---
+    Route::get('jadwal-pelajaran', [JadwalPelajaranController::class, 'index'])->name('jadwal-pelajaran.index');
+    Route::post('jadwal-pelajaran', [JadwalPelajaranController::class, 'store'])->name('jadwal-pelajaran.store');
+    Route::put('jadwal-pelajaran/{jadwalPelajaran}', [JadwalPelajaranController::class, 'update'])->name('jadwal-pelajaran.update');
+    Route::delete('jadwal-pelajaran/{jadwalPelajaran}', [JadwalPelajaranController::class, 'destroy'])->name('jadwal-pelajaran.destroy');
+    Route::get('jadwal-pelajaran/hari/{hari}', [JadwalPelajaranController::class, 'getByDay'])->name('jadwal-pelajaran.byDay');
+    Route::get('jadwal-pelajaran/guru-mapels', [JadwalPelajaranController::class, 'getGuruMapels'])->name('jadwal-pelajaran.guruMapels');
 
     Route::get('penilaian/{guruMapelId}/santri', [PenilaianController::class, 'getSantriByMapel'])->name('penilaian.getSantri');
     Route::get('rekap-penilaian', [PenilaianController::class, 'rekap'])->name('rekap-penilaian.index');
@@ -122,3 +132,20 @@ Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(f
     // --- Kelas Saya (Guru) ---
     Route::get('kelas-saya', [GuruAkademikController::class, 'kelasSaya'])->name('kelas-saya.index');
     });
+
+// ======================================
+// ℹ️ INFORMASI SEKOLAH
+// ======================================
+Route::middleware(['auth:guru'])->prefix('informasi')->name('informasi.')->group(function () {
+    Route::get('struktur-organisasi', [\App\Http\Controllers\Informasi\StrukturOrganisasiController::class, 'index'])->name('struktur-organisasi.index');
+    Route::post('struktur-organisasi/update', [\App\Http\Controllers\Informasi\StrukturOrganisasiController::class, 'update'])->name('struktur-organisasi.update');
+});
+
+// ======================================
+// 👤 USER PROFILE (Shared)
+// ======================================
+Route::middleware(['auth:guru,santri,wali'])->group(function () {
+    Route::get('profile', [\App\Http\Controllers\User\ProfileController::class, 'index'])->name('profile.index');
+    Route::put('profile', [\App\Http\Controllers\User\ProfileController::class, 'update'])->name('profile.update');
+});
+

@@ -41,7 +41,7 @@ class SantriAkademikController extends Controller
             'alpa' => $santriProfile->absensis()->where('status', 'alpa')->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulan])->count(),
         ];
 
-        return view('Santri.Kehadiran.index', compact('santriProfile', 'absensi', 'stats', 'bulan'));
+        return view('User.Santri.Kehadiran.index', compact('santriProfile', 'absensi', 'stats', 'bulan'));
     }
 
     /**
@@ -68,7 +68,7 @@ class SantriAkademikController extends Controller
                 ->get();
         }
 
-        return view('Santri.Mapel.index', compact('santriProfile', 'kelas', 'mapels'));
+        return view('User.Santri.Mapel.index', compact('santriProfile', 'kelas', 'mapels'));
     }
 
     /**

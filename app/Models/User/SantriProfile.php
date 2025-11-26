@@ -26,6 +26,7 @@ class SantriProfile extends Model
         "wali_profile_id",
         "alamat",
         "status",
+        "foto",
     ];
 
     public function mapelGuru()

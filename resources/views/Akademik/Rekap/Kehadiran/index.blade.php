@@ -13,15 +13,28 @@
 
     {{-- Filter Section --}}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             {{-- Filter Kelas --}}
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Kelas</label>
-                <select x-model="selectedKelasId" @change="loadData()" class="w-full border-gray-300 rounded-md text-sm">
+                <label class="block text-xs font-medium text-gray-500 mb-1">1. Pilih Kelas</label>
+                <select x-model="selectedKelasId" @change="filterMapel()" class="w-full border-gray-300 rounded-md text-sm">
                     <option value="">-- Pilih Kelas --</option>
-                    @foreach($kelasList as $kelas)
-                        <option value="{{ $kelas->id }}">{{ $kelas->level }} {{ $kelas->nama_unik }}</option>
-                    @endforeach
+                    <template x-for="k in uniqueKelas" :key="k.id">
+                        <option :value="k.id" x-text="`Kelas ${k.level} ''}`"></option>
+                    </template>
+                </select>
+            </div>
+
+            {{-- Filter Mapel --}}
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">2. Pilih Mata Pelajaran</label>
+                <select x-model="selectedMapelId" @change="loadData()" 
+                    :disabled="!selectedKelasId"
+                    class="w-full border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                    <option value="">-- Pilih Mapel --</option>
+                    <template x-for="m in filteredMapels" :key="m.id">
+                        <option :value="m.mapel_id" x-text="m.mapel?.nama_mapel"></option>
+                    </template>
                 </select>
             </div>
 
@@ -34,7 +47,7 @@
             {{-- Cari Siswa --}}
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Cari Siswa</label>
-                <input type="text" x-model="searchQuery" @input="filterSiswa()" placeholder="Ketik nama (min 5 huruf)..." class="w-full border-gray-300 rounded-md text-sm">
+                <input type="text" x-model="searchQuery" @input="filterSiswa()" placeholder="Ketik nama (min 3 huruf)..." class="w-full border-gray-300 rounded-md text-sm">
             </div>
         </div>
     </div>
@@ -65,13 +78,13 @@
         </div>
     </div>
 
-    {{-- Main Content - Show ALL Students by Default --}}
-    <div x-show="selectedKelasId" class="space-y-6">
+    {{-- Main Content --}}
+    <div x-show="selectedMapelId" class="space-y-6">
         
         {{-- Month Header --}}
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <h3 class="text-lg font-semibold text-gray-800" x-text="`${selectedMonthName} ${selectedYear}`"></h3>
-            <p class="text-xs text-gray-500" x-text="`November ${selectedYear}`"></p>
+            <p class="text-xs text-gray-500" x-text="`Rekap Kehadiran Bulan ${selectedMonthName}`"></p>
         </div>
 
         {{-- Student List --}}
@@ -148,9 +161,9 @@
         {{-- Empty State --}}
         <div x-show="filteredStudents.length === 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-500">
             <div class="text-5xl mb-3">📚</div>
-            <div x-show="!selectedKelasId" class="text-lg font-medium">Silakan pilih kelas terlebih dahulu</div>
-            <div x-show="selectedKelasId && allStudents.length === 0" class="text-lg font-medium">Tidak ada data siswa di kelas ini</div>
-            <div x-show="selectedKelasId && allStudents.length > 0 && filteredStudents.length === 0">
+            <div x-show="!selectedMapelId" class="text-lg font-medium">Silakan pilih mata pelajaran terlebih dahulu</div>
+            <div x-show="selectedMapelId && allStudents.length === 0" class="text-lg font-medium">Tidak ada data siswa di kelas ini</div>
+            <div x-show="selectedMapelId && allStudents.length > 0 && filteredStudents.length === 0">
                 <div class="text-lg font-medium mb-2">Tidak ada siswa yang cocok dengan pencarian</div>
                 <button @click="searchQuery = ''; filterSiswa();" class="text-blue-600 hover:underline text-sm">Reset Pencarian</button>
             </div>
@@ -158,17 +171,23 @@
     </div>
 
     {{-- Not Selected State --}}
-    <div x-show="!selectedKelasId" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-500">
+    <div x-show="!selectedMapelId" class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-500">
         <div class="text-5xl mb-3">🎓</div>
-        <div class="text-lg font-medium">Silakan pilih kelas untuk melihat rekap kehadiran</div>
+        <div class="text-lg font-medium">Silakan pilih mata pelajaran untuk melihat rekap kehadiran</div>
     </div>
 </div>
 
 <script>
     function rekapKehadiranHandler() {
         return {
-            selectedKelasId: '{{ request('kelas_id') ?? '' }}',
+            guruMapels: @json($guruMapels),
+            uniqueKelas: [],
+            filteredMapels: [],
+            
+            selectedKelasId: '',
+            selectedMapelId: '',
             selectedMonth: '{{ request('bulan') ?? date('Y-m') }}',
+            
             searchQuery: '',
             allStudents: [],
             filteredStudents: [],
@@ -177,9 +196,26 @@
             selectedYear: '',
 
             init() {
+                // Extract unique kelas from guruMapels
+                const kelasMap = new Map();
+                this.guruMapels.forEach(gm => {
+                    if (gm.kelas && !kelasMap.has(gm.kelas.id)) {
+                        kelasMap.set(gm.kelas.id, gm.kelas);
+                    }
+                });
+                this.uniqueKelas = Array.from(kelasMap.values()).sort((a, b) => a.level - b.level);
+                
                 this.updateMonthInfo();
+            },
+            
+            filterMapel() {
+                this.selectedMapelId = '';
+                this.filteredMapels = [];
+                this.allStudents = [];
+                this.filteredStudents = [];
+                
                 if (this.selectedKelasId) {
-                    this.loadData();
+                    this.filteredMapels = this.guruMapels.filter(gm => gm.kelas_id == this.selectedKelasId);
                 }
             },
 
@@ -192,7 +228,7 @@
             },
 
             async loadData() {
-                if (!this.selectedKelasId) return;
+                if (!this.selectedMapelId) return;
 
                 this.updateMonthInfo();
 
@@ -200,12 +236,13 @@
                     const response = await axios.get(`/akademik/rekap-kehadiran/data`, {
                         params: {
                             kelas_id: this.selectedKelasId,
+                            mapel_id: this.selectedMapelId,
                             bulan: this.selectedMonth
                         }
                     });
 
                     this.allStudents = response.data.students || [];
-                    this.filteredStudents = this.allStudents; // Show ALL students by default
+                    this.filteredStudents = this.allStudents;
                 } catch (error) {
                     console.error('Error loading data:', error);
                     Swal.fire('Error', 'Gagal memuat data kehadiran', 'error');
@@ -213,8 +250,7 @@
             },
 
             filterSiswa() {
-                if (!this.searchQuery || this.searchQuery.length < 5) {
-                    // Show all students if search < 5 chars
+                if (!this.searchQuery || this.searchQuery.length < 3) {
                     this.filteredStudents = this.allStudents;
                     return;
                 }

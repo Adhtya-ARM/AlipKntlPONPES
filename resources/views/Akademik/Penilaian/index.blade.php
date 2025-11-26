@@ -13,22 +13,29 @@
 
     {{-- Filter Section --}}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {{-- Pilih Mapel --}}
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {{-- Pilih Kelas --}}
             <div class="md:col-span-1">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Kelas & Mapel</label>
-                <select x-model="selectedMapelId" @change="loadSantriMapel()" class="w-full border-gray-300 rounded-md text-sm">
-                    <option value="">-- Pilih Mata Pelajaran --</option>
-                    <template x-for="mapel in guruMapels" :key="mapel.id">
-                        <option :value="mapel.id" x-text="`${mapel.mapel?.nama_mapel || 'N/A'} - Kelas ${mapel.kelas?.level || '?'}${mapel.kelas?.nama_unik || ''}`"></option>
+                <label class="block text-xs font-medium text-gray-500 mb-1">1. Pilih Kelas</label>
+                <select x-model="selectedKelasId" @change="filterMapel()" class="w-full border-gray-300 rounded-md text-sm">
+                    <option value="">-- Pilih Kelas --</option>
+                    <template x-for="k in uniqueKelas" :key="k.id">
+                        <option :value="k.id" x-text="`Kelas ${k.level} ${k.nama_unik || ''}`"></option>
                     </template>
                 </select>
             </div>
 
-            {{-- Cari Siswa --}}
+            {{-- Pilih Mapel --}}
             <div class="md:col-span-1">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Cari Siswa</label>
-                <input type="text" x-model="searchQuery" @input="filterSantri()" placeholder="Ketik nama siswa..." class="w-full border-gray-300 rounded-md text-sm">
+                <label class="block text-xs font-medium text-gray-500 mb-1">2. Pilih Mata Pelajaran</label>
+                <select x-model="selectedMapelId" @change="loadSantriMapel()" 
+                    :disabled="!selectedKelasId"
+                    class="w-full border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                    <option value="">-- Pilih Mapel --</option>
+                    <template x-for="m in filteredMapels" :key="m.id">
+                        <option :value="m.id" x-text="m.mapel?.nama_mapel"></option>
+                    </template>
+                </select>
             </div>
 
             {{-- Jenis Penilaian --}}
@@ -47,6 +54,12 @@
             <div class="md:col-span-1">
                 <label class="block text-xs font-medium text-gray-500 mb-1">Tanggal Penilaian</label>
                 <input type="date" x-model="tanggalPenilaian" class="w-full border-gray-300 rounded-md text-sm">
+            </div>
+
+            {{-- Cari Siswa --}}
+            <div class="md:col-span-1">
+                <label class="block text-xs font-medium text-gray-500 mb-1">Cari Siswa</label>
+                <input type="text" x-model="searchQuery" @input="filterSantri()" placeholder="Ketik nama siswa..." class="w-full border-gray-300 rounded-md text-sm">
             </div>
         </div>
     </div>
@@ -94,8 +107,8 @@
                     
                     <tr x-show="filteredSantri.length === 0">
                         <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                            <div class="text-lg mb-2">📚</div>
-                            <div x-show="!selectedMapelId">Silakan pilih mata pelajaran terlebih dahulu</div>
+                            <div class="text-4xl mb-3">📊</div>
+                            <div x-show="!selectedMapelId">Silakan pilih Kelas dan Mata Pelajaran terlebih dahulu</div>
                             <div x-show="selectedMapelId && allSantri.length === 0">Tidak ada siswa terdaftar di mapel ini</div>
                             <div x-show="selectedMapelId && allSantri.length > 0 && filteredSantri.length === 0">Tidak ada siswa yang cocok dengan pencarian</div>
                         </td>
@@ -105,29 +118,35 @@
         </div>
 
         {{-- Action Footer --}}
-        <div x-show="selectedMapelId && filteredSantri.length > 0" class="border-t border-gray-200 bg-gray-50 px-4 py-3 flex justify-between items-center">
+        <div x-show="selectedMapelId && filteredSantri.length > 0" class="border-t border-gray-200 bg-gray-50 px-4 py-3 flex justify-between items-center sticky bottom-0 z-10">
             <div class="text-sm text-gray-600">
                 Total Siswa: <span class="font-bold" x-text="filteredSantri.length"></span>
             </div>
             <div class="flex gap-2">
-                <button @click="resetForm()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm hover:bg-gray-300">
+                <button @click="resetForm()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition shadow-sm">
                     Reset
                 </button>
-                <button @click="savePenilaian()" :disabled="isSaving" class="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50">
+                <button @click="savePenilaian()" :disabled="isSaving" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition shadow-md flex items-center gap-2">
                     <span x-show="!isSaving">Simpan Penilaian</span>
                     <span x-show="isSaving" class="flex items-center gap-2">
-                        <span class="animate-spin">↻</span> Menyimpan...
+                        <i class="fas fa-spinner fa-spin"></i> Menyimpan...
                     </span>
                 </button>
             </div>
         </div>
+    </div>
 </div>
 
 <script>
     function penilaianMapelHandler() {
         return {
             guruMapels: @json($guruMapels ?? []),
-            selectedMapelId: '',
+            uniqueKelas: [],
+            filteredMapels: [],
+            
+            selectedKelasId: '',
+            selectedMapelId: '{{ $preSelectedMapelId ?? "" }}',
+            
             allSantri: [],
             filteredSantri: [],
             searchQuery: '',
@@ -137,46 +156,87 @@
             isSaving: false,
 
             init() {
-                console.log('Guru Mapels:', this.guruMapels);
+                // Extract unique kelas from guruMapels
+                const kelasMap = new Map();
+                this.guruMapels.forEach(gm => {
+                    if (gm.kelas && !kelasMap.has(gm.kelas.id)) {
+                        kelasMap.set(gm.kelas.id, gm.kelas);
+                    }
+                });
+                this.uniqueKelas = Array.from(kelasMap.values()).sort((a, b) => a.level - b.level);
+                
+                if (this.selectedMapelId) {
+                    const gm = this.guruMapels.find(g => g.id == this.selectedMapelId);
+                    if (gm) {
+                        this.selectedKelasId = gm.kelas_id;
+                        this.filterMapel();
+                        this.loadSantriMapel();
+                    }
+                }
                 
                 // Watch for changes that might require reset or reload
-                // this.$watch('tanggalPenilaian', () => this.resetForm());
-                // this.$watch('jenisPenilaian', () => this.resetForm());
+                this.$watch('tanggalPenilaian', () => {
+                    if (this.selectedMapelId) this.loadSantriMapel();
+                });
+                this.$watch('jenisPenilaian', () => {
+                    if (this.selectedMapelId) this.loadSantriMapel();
+                });
+            },
+
+            filterMapel() {
+                this.selectedMapelId = '';
+                this.filteredMapels = [];
+                this.allSantri = [];
+                this.filteredSantri = [];
+                
+                if (this.selectedKelasId) {
+                    this.filteredMapels = this.guruMapels.filter(gm => gm.kelas_id == this.selectedKelasId);
+                }
             },
 
             async loadSantriMapel() {
                 if (!this.selectedMapelId) {
-                    this.allSantri = [];
-                    this.filteredSantri = [];
                     return;
                 }
 
                 try {
-                    // Assuming the route is similar to absensi but for penilaian or reusing the logic
-                    // If the route /akademik/penilaian/{id}/santri exists
-                    const response = await axios.get(`/akademik/penilaian/${this.selectedMapelId}/santri`);
+                    const response = await axios.get(`/akademik/penilaian/${this.selectedMapelId}/santri`, {
+                        params: {
+                            date: this.tanggalPenilaian,
+                            type: this.jenisPenilaian
+                        }
+                    });
                     this.allSantri = response.data.santri || [];
                     this.filteredSantri = this.allSantri;
+                    
+                    const existing = response.data.existingGrades || {};
+                    const hasExisting = Object.keys(existing).length > 0;
 
                     // Initialize penilaian data
                     this.penilaianData = {};
                     this.allSantri.forEach(s => {
-                        this.penilaianData[s.id] = { nilai: '', keterangan: '' };
+                        if (existing[s.id]) {
+                            this.penilaianData[s.id] = { 
+                                nilai: existing[s.id].nilai, 
+                                keterangan: existing[s.id].keterangan || '' 
+                            };
+                        } else {
+                            this.penilaianData[s.id] = { nilai: '', keterangan: '' };
+                        }
                     });
+                    
+                    if (hasExisting) {
+                        Swal.fire({
+                            title: 'Sudah Ada Nilai',
+                            text: 'Data penilaian untuk tanggal dan jenis ini sudah ada.',
+                            icon: 'info',
+                            timer: 3000,
+                            timerProgressBar: true
+                        });
+                    }
                 } catch (error) {
                     console.error('Error loading santri:', error);
-                    // Fallback to absensi route if penilaian route fails (just in case)
-                    try {
-                        const response = await axios.get(`/akademik/absensi/${this.selectedMapelId}/santri`);
-                        this.allSantri = response.data.santri || [];
-                        this.filteredSantri = this.allSantri;
-                        this.penilaianData = {};
-                        this.allSantri.forEach(s => {
-                            this.penilaianData[s.id] = { nilai: '', keterangan: '' };
-                        });
-                    } catch (e) {
-                        Swal.fire('Error', 'Gagal memuat data siswa', 'error');
-                    }
+                    Swal.fire('Error', 'Gagal memuat data siswa', 'error');
                 }
             },
 

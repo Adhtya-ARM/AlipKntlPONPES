@@ -8,6 +8,13 @@ class LandingController extends Controller
 {
     public function index()
     {
-        return view('landing');
+        $struktur = \App\Models\User\GuruProfile::where('tampilkan_di_landing', true)
+            ->whereRaw('LOWER(jabatan) != ?', ['guru'])
+            ->whereNotNull('jabatan')
+            ->where('jabatan', '!=', '')
+            ->orderBy('nama')
+            ->get();
+
+        return view('Landing Page.index', compact('struktur'));
     }
 }

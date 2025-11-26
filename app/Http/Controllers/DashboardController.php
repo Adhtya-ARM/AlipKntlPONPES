@@ -11,6 +11,7 @@ use App\Models\Akademik\GuruMapel;
 use App\Models\Akademik\Mapel;
 use App\Models\Akademik\Penilaian;
 use App\Models\Akademik\RencanaPembelajaran;
+use App\Models\Akademik\JadwalPelajaran;
 use App\Models\User\SantriKelas;
 use App\Models\User\SantriProfile;
 use App\Models\User\Santri;
@@ -91,8 +92,8 @@ class DashboardController extends Controller
         })->filter()->unique()->values()->all();
 
         // Ambil active role (mts|ma|both) dari session/user fallback
-        $activeRole = session('active_guru_role') ?? ($user->last_active_guru_role ?? null);
-        $activeRole = $this->normalizeActiveRole($activeRole, $user->sub_roles ?? []);
+        // Removed as per request
+        $activeRole = null;
 
         // Total santri yang diajar: cari berdasarkan kelas identifier yang tersedia
         $totalSantri = 0;
@@ -149,7 +150,26 @@ class DashboardController extends Controller
             }
         }
 
-        return view('Dashboard.Guru', compact('mapels', 'guruMapels', 'guruProfile', 'totalSantri', 'totalPenilaian', 'activeRole', 'kalenderEvents'));
+        // Ambil jadwal mengajar hari ini
+        $hariIndonesia = [
+            'Sunday' => 'Minggu',
+            'Monday' => 'Senin', 
+            'Tuesday' => 'Selasa',
+            'Wednesday' => 'Rabu',
+            'Thursday' => 'Kamis',
+            'Friday' => 'Jumat',
+            'Saturday' => 'Sabtu'
+        ];
+        
+        $hariIni = $hariIndonesia[now()->format('l')] ?? 'Senin';
+        
+        $jadwalHariIni = JadwalPelajaran::where('guru_profile_id', $guruProfile->id)
+            ->where('hari', $hariIni)
+            ->with(['kelas', 'mapel'])
+            ->orderBy('jam_ke')
+            ->get();
+
+        return view('Dashboard.Guru', compact('mapels', 'guruMapels', 'guruProfile', 'totalSantri', 'totalPenilaian', 'activeRole', 'kalenderEvents', 'jadwalHariIni', 'hariIni'));
     }
 
     /**
@@ -180,19 +200,19 @@ class DashboardController extends Controller
         $bulanIni = now()->format('Y-m');
         $absensiStats = [
             'hadir' => $santriProfile->absensis()
-                ->where('status', 'hadir')
+                ->where('status', 'H')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count(),
             'sakit' => $santriProfile->absensis()
-                ->where('status', 'sakit')
+                ->where('status', 'S')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count(),
             'izin' => $santriProfile->absensis()
-                ->where('status', 'izin')
+                ->where('status', 'I')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count(),
             'alpa' => $santriProfile->absensis()
-                ->where('status', 'alpa')
+                ->where('status', 'A')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count(),
         ];
@@ -232,6 +252,28 @@ class DashboardController extends Controller
             }
         }
 
+        // Ambil jadwal pelajaran hari ini untuk kelas santri
+        $hariIndonesia = [
+            'Sunday' => 'Minggu',
+            'Monday' => 'Senin', 
+            'Tuesday' => 'Selasa',
+            'Wednesday' => 'Rabu',
+            'Thursday' => 'Kamis',
+            'Friday' => 'Jumat',
+            'Saturday' => 'Sabtu'
+        ];
+        
+        $hariIni = $hariIndonesia[now()->format('l')] ?? 'Senin';
+        $jadwalHariIni = collect();
+
+        if ($kelas) {
+            $jadwalHariIni = JadwalPelajaran::where('kelas_id', $kelas->id)
+                ->where('hari', $hariIni)
+                ->with(['mapel', 'guruProfile'])
+                ->orderBy('jam_ke')
+                ->get();
+        }
+
         return view('Dashboard.Santri', compact(
             'santriProfile', 
             'kelas', 
@@ -239,7 +281,9 @@ class DashboardController extends Controller
             'absensiStats', 
             'totalPenilaian', 
             'penilaianTerbaru',
-            'kalenderEvents'
+            'kalenderEvents',
+            'jadwalHariIni',
+            'hariIni'
         ));
     }
 
@@ -272,19 +316,19 @@ class DashboardController extends Controller
 
         foreach ($santriAnak as $santri) {
             $totalAbsensiHadir += $santri->absensis()
-                ->where('status', 'hadir')
+                ->where('status', 'H')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count();
             $totalAbsensiSakit += $santri->absensis()
-                ->where('status', 'sakit')
+                ->where('status', 'S')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count();
             $totalAbsensiIzin += $santri->absensis()
-                ->where('status', 'izin')
+                ->where('status', 'I')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count();
             $totalAbsensiAlpa += $santri->absensis()
-                ->where('status', 'alpa')
+                ->where('status', 'A')
                 ->whereRaw('DATE_FORMAT(tanggal, "%Y-%m") = ?', [$bulanIni])
                 ->count();
             $totalPenilaian += $santri->penilaians()->count();
@@ -401,28 +445,7 @@ class DashboardController extends Controller
     /**
      * Normalisasi active role: jika role valid kembalikan role, jika tidak dan subRoles > 1 return 'both', dsb.
      */
-    private function normalizeActiveRole($activeRole, $subRoles = [])
-    {
-        $subRoles = is_array($subRoles) ? $subRoles : (is_null($subRoles) ? [] : (array) $subRoles);
-
-        if ($activeRole && in_array($activeRole, $subRoles, true)) {
-            return $activeRole;
-        }
-
-        if (in_array('mts', $subRoles, true) && !in_array('ma', $subRoles, true)) {
-            return 'mts';
-        }
-
-        if (in_array('ma', $subRoles, true) && !in_array('mts', $subRoles, true)) {
-            return 'ma';
-        }
-
-        if (count($subRoles) > 1) {
-            return 'both';
-        }
-
-        return null;
-    }
+    // normalizeActiveRole method removed
 }
 
 /**

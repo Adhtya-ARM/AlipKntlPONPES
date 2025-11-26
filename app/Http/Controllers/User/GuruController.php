@@ -12,17 +12,12 @@ use Illuminate\Validation\Rule;
 
 class GuruController extends Controller
 {
-    // Definisikan nilai status yang valid (opsional, jika ada status untuk guru)
-    // Definisikan nilai status yang valid (opsional, jika ada status untuk guru)
-    // private const VALID_STATUSES = ["aktif", "non-aktif"];
-
-    /**
-     * Tampilkan daftar semua guru (READ - All).
-     */
     public function index(Request $request)
     {
         // 1. Mulai Query Builder
-        $query = Guru::with("guruProfile");
+        $query = Guru::with(["guruProfile" => function($q) {
+            $q->withCount(['guruMapels', 'kelasWali']);
+        }]);
 
         // 2. Logika Pencarian
         if ($request->filled('search')) {
@@ -39,12 +34,9 @@ class GuruController extends Controller
         $gurus = $query->paginate(10);
 
         // 4. Kirim ke view
-        return view("User.Guru.index", compact("gurus"));
+        return view("User.Management.Guru.Index", compact("gurus"));
     }
 
-    /**
-     * Tampilkan form untuk membuat guru baru (CREATE - Form).
-     */
     /**
      * Tampilkan form untuk membuat guru baru (CREATE - Form).
      */
@@ -53,9 +45,6 @@ class GuruController extends Controller
         return view("User.Guru.create");
     }
 
-    /**
-     * Simpan data guru baru ke database (CREATE - Store).
-     */
     /**
      * Simpan data guru baru ke database (CREATE - Store).
      */
@@ -71,7 +60,7 @@ class GuruController extends Controller
         // 1. Validasi Input
         $validatedData = $request->validate([
             "username" => "required|string|unique:guru,username|unique:wali,username|max:50",
-            "password" => "required|string|min:8|confirmed",
+            "password" => "required|string|min:8", // Hapus confirmed
 
             // Data Profile Guru
             "nama" => "required|string|max:255",
@@ -100,22 +89,11 @@ class GuruController extends Controller
 
             DB::commit();
 
-            $guruNama = $validatedData["nama"];
+            return response()->json(['message' => "Data Guru **" . $validatedData["nama"] . "** berhasil ditambahkan!"], 200);
 
-            return redirect()
-                ->route("guru.index")
-                ->with(
-                    "success",
-                    "Data Guru **" . $guruNama . "** berhasil ditambahkan!",
-                );
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with(
-                    "error",
-                    "Gagal menyimpan data Guru. Detail: " . $e->getMessage(),
-                );
+            return response()->json(['message' => "Gagal menyimpan data Guru. Detail: " . $e->getMessage()], 500);
         }
     }
 
@@ -128,9 +106,6 @@ class GuruController extends Controller
         return view("User.Guru.show", compact("guru"));
     }
 
-    /**
-     * Tampilkan form untuk mengedit guru tertentu (UPDATE - Form).
-     */
     /**
      * Tampilkan form untuk mengedit guru tertentu (UPDATE - Form).
      */
@@ -160,7 +135,7 @@ class GuruController extends Controller
                 "max:50",
                 // FIX: Tidak ada validasi unique saat update (sesuai request user)
             ],
-            "password" => "nullable|string|min:8|confirmed",
+            "password" => "nullable|string|min:8", // Hapus confirmed
 
             // Data Profile Guru
             "nama" => "required|string|max:255",
@@ -194,23 +169,11 @@ class GuruController extends Controller
 
             DB::commit();
 
-            $guruNama = $validatedData["nama"];
+            return response()->json(['message' => "Data Guru **" . $validatedData["nama"] . "** berhasil diperbarui!"], 200);
 
-            return redirect()
-                ->route("guru.index")
-                ->with(
-                    "success",
-                    "Data Guru **" . $guruNama . "** berhasil diperbarui!",
-                );
         } catch (\Exception $e) {
             DB::rollback();
-            return back()
-                ->withInput()
-                ->with(
-                    "error",
-                    "Gagal memperbarui data Guru. Detail: " .
-                        $e->getMessage(),
-                );
+            return response()->json(['message' => "Gagal memperbarui data Guru. Detail: " . $e->getMessage()], 500);
         }
     }
 
@@ -225,7 +188,14 @@ class GuruController extends Controller
         if (!in_array($jabatan, ['kepala sekolah', 'wakil kepala sekolah', 'kepsek', 'waka'])) {
             abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
         }
-        $nama = $guru->guruProfile->nama ?? "Nama Guru";
+        
+        // Cek Relasi
+        $profile = $guru->guruProfile;
+        if ($profile && ($profile->guruMapels()->exists() || $profile->kelasWali()->exists())) {
+            return response()->json(['message' => 'Gagal menghapus! Guru masih aktif mengajar atau menjadi wali kelas.'], 422);
+        }
+
+        $nama = $profile->nama ?? "Nama Guru";
 
         try {
             DB::beginTransaction();
@@ -240,18 +210,10 @@ class GuruController extends Controller
 
             DB::commit();
 
-            return redirect()
-                ->route("guru.index")
-                ->with(
-                    "success",
-                    "Data Guru **" . $nama . "** berhasil dihapus!",
-                );
+            return response()->json(['message' => "Data Guru **" . $nama . "** berhasil dihapus!"], 200);
         } catch (\Exception $e) {
             DB::rollback();
-            return back()->with(
-                "error",
-                "Gagal menghapus data Guru. Detail: " . $e->getMessage(),
-            );
+            return response()->json(['message' => "Gagal menghapus data Guru. Detail: " . $e->getMessage()], 500);
         }
     }
 }

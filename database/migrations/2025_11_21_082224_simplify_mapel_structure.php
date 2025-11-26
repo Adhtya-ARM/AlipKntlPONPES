@@ -26,9 +26,6 @@ return new class extends Migration
                 if (!Schema::hasColumn('mapel', 'kategori')) {
                     $table->string('kategori')->default('umum')->after('nama_mapel'); // umum, kejuruan, khusus
                 }
-                if (!Schema::hasColumn('mapel', 'kelompok')) {
-                    $table->string('kelompok')->nullable()->after('kategori'); // nama kelompok
-                }
                 if (!Schema::hasColumn('mapel', 'jjm')) {
                     $table->integer('jjm')->default(2)->after('kelompok'); // Jam per minggu
                 }

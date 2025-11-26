@@ -11,6 +11,7 @@ use App\Models\User\GuruProfile;
 use App\Models\User\SantriProfile;
 use App\Models\User\SantriKelas;
 use App\Models\Akademik\GuruMapel;
+use App\Models\Akademik\JadwalPelajaran;
 
 class Kelas extends Model
 {
@@ -20,15 +21,13 @@ class Kelas extends Model
 
     protected $fillable = [
         'level',
-        'nama_unik',
-        'guru_profile_id', // kalau ini masih digunakan
-        'wali_kelas_id',
+        'guru_profile_id',
     ];
     
     protected function namaDisplay(): Attribute
     {
         return Attribute::make(
-            get: fn() => 'Kelas ' . $this->level . $this->nama_unik
+            get: fn() => 'Kelas ' . $this->level 
         );
     }
 
@@ -46,14 +45,19 @@ class Kelas extends Model
 
     // 🔹 Ambil data santri dari pivot
     public function santriProfile()
-      {
-          return $this->BelongsToMany(SantriProfile::class, 'santri_kelas', 'kelas_id', 'santri_profile_id',)
-              ->withPivot(['tahun_ajaran'])
-              ->withTimestamps();
-      }
+    {
+        return $this->BelongsToMany(SantriProfile::class, 'santri_kelas', 'kelas_id', 'santri_profile_id',)
+            ->withPivot(['tahun_ajaran'])
+            ->withTimestamps();
+    }
 
     public function waliKelas()
     {
-        return $this->BelongsTo(GuruProfile::class, 'wali_kelas_id');
+        return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
+    }
+
+    public function jadwalPelajaran()
+    {
+        return $this->hasMany(JadwalPelajaran::class, 'kelas_id');
     }
 }

@@ -47,11 +47,9 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">No</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jurusan</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Kelas</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Tingkat</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tingkat</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wali Kelas</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Aksi</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-80">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -59,12 +57,8 @@
                         <tr class="hover:bg-gray-50 transition">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="index + 1"></td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900" x-text="kelas.nama_unik"></div>
+                                <div class="text-sm font-semibold text-gray-900" x-text="kelas.level"></div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900" x-text="`${kelas.level} ${kelas.nama_unik}`"></div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="kelas.level"></td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 {{-- Readonly mode: Tampilkan nama guru jika ada dan tidak dalam mode edit Wali Kelas --}}
                                 <template x-if="kelas.wali_kelas_id && editingWaliId !== kelas.id">
@@ -74,7 +68,6 @@
                                 {{-- Editable mode: Tampilkan dropdown jika belum ada wali kelas atau mode edit diaktifkan --}}
                                 <template x-if="!kelas.wali_kelas_id || editingWaliId === kelas.id">
                                     <select x-model="kelas.wali_kelas_id" 
-                                            @change="updateWaliKelas(kelas.id, kelas.wali_kelas_id)"
                                             :disabled="editingWaliId !== kelas.id"
                                             class="border-gray-300 rounded-md text-sm w-full transition duration-150 ease-in-out p-2"
                                             :class="editingWaliId === kelas.id ? 'bg-white shadow-inner focus:ring-blue-500 focus:border-blue-500' : 'bg-gray-50 cursor-not-allowed'">
@@ -85,45 +78,55 @@
                                     </select>
                                 </template>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                
-                                {{-- Tombol Atur Siswa --}}
-                                <button @click="openStudentModal(kelas)" 
-                                        class="text-indigo-600 hover:text-indigo-900 mr-2 p-1 rounded-full hover:bg-indigo-100 transition duration-150 ease-in-out"
-                                        title="Atur Siswa">
-                                    <i class="fas fa-users"></i>
-                                </button>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    {{-- Tombol Atur Siswa --}}
+                                    <button @click="openStudentModal(kelas)" 
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition text-xs font-medium"
+                                            title="Atur Siswa">
+                                        <i class="fas fa-users text-sm"></i>
+                                        <span>Siswa</span>
+                                    </button>
 
-                                {{-- Tombol Edit Data Kelas (Membuka Modal) --}}
-                                <button @click="editKelas(kelas)" 
-                                        class="text-blue-600 hover:text-blue-900 mr-2 p-1 rounded-full hover:bg-blue-100 transition duration-150 ease-in-out"
-                                        title="Edit Data Kelas (Tingkat/Jurusan)">
-                                    <i class="fas fa-pen"></i>
-                                </button>
+                                    {{-- Tombol Edit Data Kelas --}}
+                                    <button @click="editKelas(kelas)" 
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 transition text-xs font-medium"
+                                            title="Edit Tingkat/Jurusan">
+                                        <i class="fas fa-pen text-sm"></i>
+                                        <span>Edit</span>
+                                    </button>
 
-                                {{-- Tombol Ubah Wali Kelas (Toggle Dropdown) --}}
-                                <button @click="toggleWaliKelasEdit(kelas)" 
-                                        class="mr-3 p-1 rounded-full transition duration-150 ease-in-out"
-                                        :class="editingWaliId === kelas.id ? 'text-green-600 bg-green-100 hover:bg-green-200' : 'text-purple-600 hover:text-purple-900 hover:bg-purple-100'"
-                                        :title="editingWaliId === kelas.id ? 'Simpan Wali Kelas' : 'Ubah Wali Kelas'">
-                                    <i class="fas" :class="editingWaliId === kelas.id ? 'fa-check' : 'fa-user-cog'"></i>
-                                </button>
-                                
-                                {{-- Tombol Hapus --}}
-                                <button @click="deleteKelas(kelas.id)" class="text-red-600 hover:text-red-900" x-show="!kelas.is_locked">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                                
-                                {{-- Ikon Terkunci --}}
-                                <span x-show="kelas.is_locked" class="text-gray-400 ml-1" title="Kelas terkunci karena sudah digunakan">
-                                    <i class="fas fa-lock"></i>
-                                </span>
+                                    {{-- Tombol Ubah/Simpan Wali Kelas --}}
+                                    <button @click="toggleWaliKelasEdit(kelas)" 
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-md transition text-xs font-medium"
+                                            :class="editingWaliId === kelas.id ? 'bg-green-50 text-green-700 hover:bg-green-100' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'"
+                                            :title="editingWaliId === kelas.id ? 'Simpan Wali Kelas' : 'Ubah Wali Kelas'">
+                                        <i class="fas text-sm" :class="editingWaliId === kelas.id ? 'fa-check' : 'fa-user-cog'"></i>
+                                        <span x-text="editingWaliId === kelas.id ? 'Simpan' : 'Wali'"></span>
+                                    </button>
+                                    
+                                    {{-- Tombol Hapus atau Icon Lock --}}
+                                    <button @click="deleteKelas(kelas.id)" 
+                                            x-show="!kelas.is_locked"
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition text-xs font-medium"
+                                            title="Hapus Kelas">
+                                        <i class="fas fa-trash text-sm"></i>
+                                        <span>Hapus</span>
+                                    </button>
+                                    
+                                    <span x-show="kelas.is_locked" 
+                                          class="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 rounded-md text-xs font-medium cursor-not-allowed" 
+                                          title="Kelas terkunci karena sudah digunakan">
+                                        <i class="fas fa-lock text-sm"></i>
+                                        <span>Terkunci</span>
+                                    </span>
+                                </div>
                             </td>
                         </tr>
                     </template>
                     
                     <tr x-show="filteredKelas.length === 0">
-                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                        <td colspan="4" class="px-6 py-12 text-center text-gray-500">
                             <i class="fas fa-inbox text-4xl mb-2"></i>
                             <div>Tidak ada data kelas</div>
                         </td>
@@ -152,17 +155,11 @@
                     </select>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Kelas / Jurusan</label>
-                    <input type="text" x-model="form.nama_unik" placeholder="Contoh: TITL, TKR, TPEM" class="w-full border-gray-300 rounded-md text-sm p-2">
-                    <p class="text-xs text-gray-500 mt-1">Contoh: TITL (Teknik Instalasi Tenaga Listrik)</p>
-                </div>
-
                 <div x-show="modalMode === 'edit'">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Wali Kelas (Untuk tampilan)</label>
                     {{-- Menampilkan nama wali kelas saat ini dari form data --}}
                     <input type="text" :value="form.wali_kelas_id ? getGuruName(form.wali_kelas_id) : 'Belum Ditentukan'" disabled class="w-full border-gray-300 rounded-md text-sm p-2 bg-gray-100 cursor-not-allowed">
-                    <p class="text-xs text-gray-500 mt-1">Perubahan Wali Kelas dilakukan langsung pada tabel dengan tombol "Ubah Wali" (ikon gear).</p>
+                    <p class="text-xs text-gray-500 mt-1">Perubahan Wali Kelas dilakukan langsung pada tabel dengan tombol "Wali/Simpan".</p>
                 </div>
             </div>
 
@@ -188,13 +185,24 @@
                 </button>
             </div>
             
+            {{-- Search Input --}}
+            <div class="mb-4">
+                <div class="relative">
+                    <input type="text" 
+                           x-model="searchQuery" 
+                           placeholder="Cari nama atau NISN santri..."
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                </div>
+            </div>
+            
             <div class="mb-4 flex justify-between items-center">
                 <div class="text-sm text-gray-600">
-                    Total Siswa: <span class="font-bold" x-text="students.length"></span> | 
+                    Total Siswa: <span class="font-bold" x-text="filteredStudents.length"></span> | 
                     Terpilih: <span class="font-bold text-blue-600" x-text="selectedStudents.length"></span>
                 </div>
                 <button @click="toggleSelectAll()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                    <span x-text="selectedStudents.length === students.length ? 'Hapus Semua' : 'Tandai Semua'"></span>
+                    <span x-text="isAllFilteredSelected() ? 'Hapus Semua' : 'Tandai Semua'"></span>
                 </button>
             </div>
 
@@ -206,14 +214,33 @@
                 <div x-show="!isLoadingStudents && students.length === 0" class="text-center py-8 text-gray-500">
                     Tidak ada data siswa tersedia.
                 </div>
+                
+                <div x-show="!isLoadingStudents && filteredStudents.length === 0 && students.length > 0" class="text-center py-8 text-gray-500">
+                    <i class="fas fa-search text-3xl mb-2"></i>
+                    <div>Tidak ada santri yang sesuai dengan pencarian</div>
+                </div>
 
-                <div x-show="!isLoadingStudents && students.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <template x-for="student in students" :key="student.id">
-                        <label class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 hover:bg-blue-50 cursor-pointer transition">
-                            <input type="checkbox" :value="student.id" x-model="selectedStudents" class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500">
-                            <div>
-                                <div class="text-sm font-semibold text-gray-800" x-text="student.nama"></div>
+                <div x-show="!isLoadingStudents && filteredStudents.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <template x-for="student in filteredStudents" :key="student.id">
+                        <label class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200 transition"
+                               :class="student.has_relations ? 'bg-gray-50 cursor-not-allowed' : 'hover:bg-blue-50 cursor-pointer'">
+                            <input type="checkbox" 
+                                   :value="student.id" 
+                                   x-model="selectedStudents" 
+                                   :disabled="student.has_relations"
+                                   class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+                                   :class="student.has_relations ? 'opacity-50 cursor-not-allowed' : ''">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-semibold text-gray-800" x-text="student.nama"></span>
+                                    <i x-show="student.has_relations" 
+                                       class="fas fa-lock text-xs text-red-500" 
+                                       title="Santri memiliki data absensi/penilaian dan tidak dapat dihapus dari kelas"></i>
+                                </div>
                                 <div class="text-xs text-gray-500" x-text="student.nisn"></div>
+                                <div x-show="student.has_relations" class="text-xs text-red-600 mt-1">
+                                    Terdaftar dengan data absensi/penilaian
+                                </div>
                             </div>
                         </label>
                     </template>
@@ -258,12 +285,12 @@
             selectedStudents: [],
             isLoadingStudents: false,
             isSavingStudents: false,
+            searchQuery: '', // Search query for filtering students
 
             // Form data untuk modal (Tambah/Edit Kelas)
             form: {
                 id: null,
                 level: '',
-                nama_unik: '',
                 wali_kelas_id: ''
             },
 
@@ -284,6 +311,26 @@
                 const guru = this.guruList.find(g => g.id == id);
                 return guru ? guru.nama : 'N/A';
             },
+            
+            // Computed property for filtered students based on search
+            get filteredStudents() {
+                if (!this.searchQuery) {
+                    return this.students;
+                }
+                const query = this.searchQuery.toLowerCase();
+                return this.students.filter(student => {
+                    const nama = student.nama ? student.nama.toLowerCase() : '';
+                    const nisn = student.nisn ? String(student.nisn).toLowerCase() : '';
+                    return nama.includes(query) || nisn.includes(query);
+                });
+            },
+            
+            // Check if all filtered students are selected
+            isAllFilteredSelected() {
+                const availableStudents = this.filteredStudents.filter(s => !s.has_relations);
+                if (availableStudents.length === 0) return false;
+                return availableStudents.every(s => this.selectedStudents.includes(s.id.toString()));
+            },
 
             // === Manajemen Modal (Tambah/Edit Kelas: Tingkat & Nama Unik) ===
             openModal(mode) {
@@ -300,15 +347,15 @@
                 this.form = {
                     id: kelas.id,
                     level: kelas.level.toString(),
-                    nama_unik: kelas.nama_unik,
-                    wali_kelas_id: kelas.wali_kelas_id || '' 
+                    wali_kelas_id: kelas.wali_kelas_id || ''
                 };
                 this.showModal = true;
             },
 
             async saveKelas() {
-                if (!this.form.level || !this.form.nama_unik) {
-                    Swal.fire('Error', 'Tingkat dan Nama Kelas harus diisi', 'error');
+                // Validasi hanya Level
+                if (!this.form.level) {
+                    Swal.fire('Error', 'Tingkat Kelas harus diisi', 'error');
                     return;
                 }
 
@@ -317,10 +364,9 @@
                 const method = this.modalMode === 'create' ? 'post' : 'put';
                 
                 try {
-                    // Hanya kirim data kelas (tingkat & nama unik). Wali kelas diabaikan di sini.
+                    // Hanya kirim level
                     const payload = {
-                        level: this.form.level,
-                        nama_unik: this.form.nama_unik,
+                        level: this.form.level
                     };
 
                     await axios[method](url, payload);
@@ -356,62 +402,67 @@
             },
 
             async updateWaliKelas(kelasId, waliKelasId) {
-                if (!kelasId) return;
+                if (!kelasId || this.isSaving) return;
 
-                // Ambil data kelas saat ini untuk mengecek perubahan
-                const currentKelas = this.allKelas.find(k => k.id === kelasId);
-                
-                // Jika tidak ada perubahan
-                if (currentKelas && (currentKelas.wali_kelas_id == waliKelasId || (!currentKelas.wali_kelas_id && waliKelasId === ""))) {
-                     this.editingWaliId = null;
-                     return;
-                }
+                console.log('UPDATE WALI KELAS:', {
+                    kelasId,
+                    waliKelasId
+                });
 
-                // Ambil data lain dari kelas yang akan diupdate
-                const kelasToUpdate = this.allKelas.find(k => k.id === kelasId);
-                if (!kelasToUpdate) return;
-                
                 this.isSaving = true;
                 
                 try {
-                    // Melakukan PUT request untuk update wali_kelas_id
-                    await axios.put(`/akademik/kelas/${kelasId}`, {
-                        wali_kelas_id: waliKelasId === "" ? null : waliKelasId, // Kirim null jika kosong
-                        level: kelasToUpdate.level,
-                        nama_unik: kelasToUpdate.nama_unik
-                    });
+                    const payload = { guru_profile_id: waliKelasId === "" ? null : waliKelasId };
+                    console.log('Sending payload:', payload);
                     
-                    // Update data di allKelas secara lokal
+                    // Melakukan PUT request untuk update guru_profile_id (wali kelas)
+                    const response = await axios.put(`/akademik/kelas/${kelasId}`, payload);
+                    console.log('Response:', response.data);
+                    
+                    // Update data lokal dari response server (SUMBER KEBENARAN)
+                    const updatedKelas = response.data.kelas;
                     const updateIndex = this.allKelas.findIndex(k => k.id === kelasId);
-                    if (updateIndex !== -1) {
-                        this.allKelas[updateIndex].wali_kelas_id = waliKelasId === "" ? null : waliKelasId;
+                    
+                    if (updateIndex !== -1 && updatedKelas) {
+                        // Update dengan data dari server
+                        this.allKelas[updateIndex].guru_profile_id = updatedKelas.guru_profile_id;
+                        this.allKelas[updateIndex].wali_kelas_id = updatedKelas.guru_profile_id;
                         
-                        // Memaksa AlpineJS untuk re-render (penting untuk filter)
-                        this.filteredKelas = [...this.allKelas.filter(k => k.level == this.filterTingkat || this.filterTingkat === '')];
+                        // Re-render
+                        this.applyFilter();
                     }
                     
                     Swal.fire({ 
                         icon: 'success', 
-                        title: 'Wali kelas berhasil diupdate', 
-                        timer: 1500, 
+                        title: 'Berhasil!',
+                        text: 'Wali kelas berhasil diupdate',
+                        timer: 2000, 
                         showConfirmButton: false 
                     });
                 } catch (error) {
-                    Swal.fire('Error', error.response?.data?.message || 'Gagal update wali kelas', 'error');
+                    console.error('Error updating wali kelas:', error);
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal!',
+                        text: error.response?.data?.message || 'Gagal update wali kelas',
+                        confirmButtonText: 'OK'
+                    });
                 } finally {
                     this.isSaving = false;
-                    this.editingWaliId = null; // Matikan mode edit setelah update
+                    this.editingWaliId = null;
                 }
             },
 
             // === Manajemen Siswa ===
             async openStudentModal(kelas) {
                 this.currentKelasId = kelas.id;
-                this.studentModalTitle = `${kelas.level} ${kelas.nama_unik}`;
+                this.studentModalTitle = `Tingkat ${kelas.level}`;
                 this.showStudentModal = true;
                 this.isLoadingStudents = true;
                 this.students = [];
                 this.selectedStudents = [];
+                this.searchQuery = ''; // Reset search when opening modal
 
                 try {
                     const response = await axios.get(`/akademik/kelas/${kelas.id}/siswa`);
@@ -427,10 +478,19 @@
             },
 
             toggleSelectAll() {
-                if (this.selectedStudents.length === this.students.length) {
-                    this.selectedStudents = [];
+                // Only toggle non-locked students from filtered list
+                const availableStudents = this.filteredStudents.filter(s => !s.has_relations);
+                const availableIds = availableStudents.map(s => s.id.toString());
+                const allSelected = availableIds.every(id => this.selectedStudents.includes(id));
+                
+                if (allSelected) {
+                    // Remove all available students from selection
+                    this.selectedStudents = this.selectedStudents.filter(id => !availableIds.includes(id));
                 } else {
-                    this.selectedStudents = this.students.map(s => s.id.toString());
+                    // Add all available students to selection (keep locked ones)
+                    const lockedIds = this.students.filter(s => s.has_relations && this.selectedStudents.includes(s.id.toString())).map(s => s.id.toString());
+                    const newSelections = [...new Set([...this.selectedStudents, ...availableIds])];
+                    this.selectedStudents = newSelections;
                 }
             },
 

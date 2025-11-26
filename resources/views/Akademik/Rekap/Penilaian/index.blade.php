@@ -13,17 +13,28 @@
 
     {{-- Filter Section --}}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {{-- Filter Kelas --}}
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">1. Pilih Kelas</label>
+                <select x-model="selectedKelasId" @change="filterMapel()" class="w-full border-gray-300 rounded-md text-sm">
+                    <option value="">-- Pilih Kelas --</option>
+                    <template x-for="k in uniqueKelas" :key="k.id">
+                        <option :value="k.id" x-text="`Kelas ${k.level} ${k.nama_unik || ''}`"></option>
+                    </template>
+                </select>
+            </div>
+
             {{-- Filter Mapel --}}
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Mata Pelajaran</label>
-                <select x-model="selectedMapelId" @change="loadData()" class="w-full border-gray-300 rounded-md text-sm">
-                    <option value="">-- Pilih Mata Pelajaran --</option>
-                    @foreach($guruMapels as $gm)
-                        <option value="{{ $gm->id }}">
-                            {{ $gm->mapel->nama_mapel }} - {{ $gm->kelas->level }} {{ $gm->kelas->nama_unik }}
-                        </option>
-                    @endforeach
+                <label class="block text-xs font-medium text-gray-500 mb-1">2. Pilih Mata Pelajaran</label>
+                <select x-model="selectedMapelId" @change="loadData()" 
+                    :disabled="!selectedKelasId"
+                    class="w-full border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                    <option value="">-- Pilih Mapel --</option>
+                    <template x-for="m in filteredMapels" :key="m.id">
+                        <option :value="m.id" x-text="m.mapel?.nama_mapel"></option>
+                    </template>
                 </select>
             </div>
 
@@ -160,20 +171,51 @@
 <script>
     function rekapPenilaianHandler() {
         return {
+            guruMapels: @json($guruMapels),
+            uniqueKelas: [],
+            filteredMapels: [],
+            
+            selectedKelasId: '',
             selectedMapelId: '{{ request('guru_mapel_id') ?? '' }}',
             selectedMonth: '{{ request('bulan') ?? date('Y-m') }}',
+            
             searchQuery: '',
             allStudents: [],
             filteredStudents: [],
             daysInMonth: 31,
             selectedMonthName: '',
             selectedYear: '',
-            guruMapels: @json($guruMapels),
 
             init() {
-                this.updateMonthInfo();
+                // Extract unique kelas from guruMapels
+                const kelasMap = new Map();
+                this.guruMapels.forEach(gm => {
+                    if (gm.kelas && !kelasMap.has(gm.kelas.id)) {
+                        kelasMap.set(gm.kelas.id, gm.kelas);
+                    }
+                });
+                this.uniqueKelas = Array.from(kelasMap.values()).sort((a, b) => a.level - b.level);
+                
                 if (this.selectedMapelId) {
-                    this.loadData();
+                    const gm = this.guruMapels.find(g => g.id == this.selectedMapelId);
+                    if (gm) {
+                        this.selectedKelasId = gm.kelas_id;
+                        this.filterMapel();
+                        this.loadData();
+                    }
+                }
+                
+                this.updateMonthInfo();
+            },
+            
+            filterMapel() {
+                this.selectedMapelId = '';
+                this.filteredMapels = [];
+                this.allStudents = [];
+                this.filteredStudents = [];
+                
+                if (this.selectedKelasId) {
+                    this.filteredMapels = this.guruMapels.filter(gm => gm.kelas_id == this.selectedKelasId);
                 }
             },
 

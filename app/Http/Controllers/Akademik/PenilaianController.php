@@ -14,7 +14,7 @@ class PenilaianController extends Controller
     /**
      * Display input penilaian page for guru
      */
-    public function index()
+    public function index(Request $request)
     {
         $guard = $this->getGuardName();
 
@@ -32,19 +32,26 @@ class PenilaianController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level,nama_unik'])
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
             ->where('guru_profile_id', $guruProfile->id)
             ->get();
+            
+        $preSelectedMapelId = $request->query('guru_mapel_id');
 
-        return view('Akademik.Penilaian.index', compact('guruMapels'));
+        return view('Akademik.Penilaian.index', compact('guruMapels', 'preSelectedMapelId'));
     }
 
     /**
      * Get list of santri for a specific mapel/kelas
      */
-    public function getSantriByMapel($guruMapelId)
+    /**
+     * Get list of santri for a specific mapel/kelas
+     */
+    public function getSantriByMapel(Request $request, $guruMapelId)
     {
         $guruMapel = GuruMapel::with('kelas.santriProfile')->findOrFail($guruMapelId);
+        $date = $request->query('date');
+        $type = $request->query('type');
 
         $santriList = $guruMapel->kelas?->santriProfile()
             ->select('santri_profile.id', 'santri_profile.nama', 'santris.nisn')
@@ -52,10 +59,27 @@ class PenilaianController extends Controller
             ->where('santri_profile.status', 'aktif')
             ->orderBy('santri_profile.nama')
             ->get() ?? collect([]);
+            
+        // If date and type are provided, fetch existing grades
+        $existingGrades = [];
+        if ($date && $type) {
+            $existingGrades = Penilaian::where('guru_mapel_id', $guruMapelId)
+                ->where('tanggal', $date)
+                ->where('jenis_penilaian', $type)
+                ->get()
+                ->keyBy('santri_profile_id')
+                ->map(function($item) {
+                    return [
+                        'nilai' => $item->nilai,
+                        'keterangan' => $item->keterangan
+                    ];
+                });
+        }
 
         return response()->json([
             'santri' => $santriList,
             'jumlahSantri' => $santriList->count(),
+            'existingGrades' => $existingGrades
         ]);
     }
 
@@ -82,10 +106,6 @@ class PenilaianController extends Controller
             DB::beginTransaction();
 
             foreach ($validated['penilaian'] as $nilaiData) {
-                // Skip if nilai is null/empty, unless you want to record it as 0 or empty
-                // But usually we updateOrCreate. If value is null, maybe we shouldn't create?
-                // Let's assume we updateOrCreate if it exists, or create if provided.
-                
                 if (!isset($nilaiData['nilai']) && !isset($nilaiData['keterangan'])) {
                     continue; 
                 }
@@ -151,11 +171,11 @@ class PenilaianController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level,nama_unik'])
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
             ->where('guru_profile_id', $guruProfile->id)
             ->get();
 
-        return view('Akademik.Penilaian.rekap', compact('guruMapels'));
+        return view('Akademik.Rekap.Penilaian.index', compact('guruMapels'));
     }
 
     /**

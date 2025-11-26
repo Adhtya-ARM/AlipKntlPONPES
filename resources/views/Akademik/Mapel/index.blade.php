@@ -7,10 +7,7 @@
     
     {{-- HEADER --}}
     <div class="mb-6">
-        <h1 class="text-3xl font-bold text-gray-800">Pengaturan Mata Pelajaran (TA: 2025/2026)</h1>
-        <p class="text-sm text-gray-500 mt-1">
-            <i class="fas fa-arrow-left mr-1"></i> Kembali ke Daftar Kelas
-        </p>
+        <h1 class="text-3xl font-bold text-gray-800">Pengaturan Mata Pelajaran</h1>
     </div>
 
     {{-- KELOMPOK MAPEL SMP (7, 8, 9) --}}
@@ -18,15 +15,6 @@
         <h2 class="text-xl font-bold text-gray-700 mb-4">Kelompok Mapel SMP</h2>
         
         <template x-for="(kelompok, kIndex) in kelompokMapels.filter(k => k.jenis === 'smp')" :key="kelompok.id">
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="font-semibold text-gray-600" x-text="kelompok.nama"></h3>
-                    <button @click="deleteKelompok(kelompok.id)" 
-                        class="text-red-500 hover:text-red-700 text-sm">
-                        <i class="fas fa-minus-circle"></i>
-                    </button>
-                </div>
-
                 <table class="min-w-full border">
                     <thead class="bg-gray-50">
                         <tr>
@@ -57,21 +45,32 @@
                                 <td class="px-4 py-2 border">
                                     <div class="flex items-center justify-center space-x-3">
                                         <template x-for="tingkat in ['7', '8', '9']" :key="tingkat">
-                                            <label class="flex items-center space-x-1 text-sm">
+                                            <label class="flex items-center space-x-1 text-sm" :title="mapel.used_levels && mapel.used_levels.includes(tingkat) ? 'Tingkat ini sedang digunakan (terkunci)' : ''">
                                                 <input type="checkbox" 
                                                     :checked="mapel.tingkat && mapel.tingkat.includes(tingkat)"
                                                     @change="toggleTingkat(mapel, tingkat, $event.target.checked)"
-                                                    class="w-4 h-4 text-purple-600 border-gray-300 rounded">
-                                                <span class="bg-purple-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                                    :disabled="mapel.used_levels && mapel.used_levels.includes(tingkat)"
+                                                    class="w-4 h-4 text-purple-600 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                                                <span class="bg-purple-100 px-2 py-0.5 rounded" x-text="tingkat" :class="{'opacity-50': mapel.used_levels && mapel.used_levels.includes(tingkat)}"></span>
                                             </label>
                                         </template>
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-center border">
-                                    <button @click="deleteMapel(mapel.id)" 
-                                        class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600">
-                                        <i class="fas fa-times"></i>
-                                    </button>
+                                    <template x-if="mapel.guru_mapels_count > 0">
+                                        <button @click="showCannotDeleteInfo()" 
+                                            class="bg-gray-300 text-gray-500 w-8 h-8 rounded-full cursor-not-allowed" 
+                                            title="Mapel tidak dapat dihapus karena sedang digunakan">
+                                            <i class="fas fa-lock"></i>
+                                        </button>
+                                    </template>
+                                    <template x-if="!mapel.guru_mapels_count || mapel.guru_mapels_count == 0">
+                                        <button @click="deleteMapel(mapel.id)" 
+                                            class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600"
+                                            title="Hapus Mapel">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </template>
                                 </td>
                             </tr>
                         </template>
@@ -123,19 +122,10 @@
         <h2 class="text-xl font-bold text-gray-700 mb-4">Kelompok Mapel SMA</h2>
         
         <template x-for="(kelompok, kIndex) in kelompokMapels.filter(k => k.jenis === 'sma')" :key="kelompok.id">
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="font-semibold text-gray-600" x-text="kelompok.nama"></h3>
-                    <button @click="deleteKelompok(kelompok.id)" 
-                        class="text-red-500 hover:text-red-700 text-sm">
-                        <i class="fas fa-minus-circle"></i>
-                    </button>
-                </div>
-
                 <table class="min-w-full border">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">#</th>
+                            <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">No</th>
                             <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700 border">Nama Mapel</th>
                             <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">JJM</th>
                             <th class="px-4 py-2 text-center text-sm font-semibold text-gray-700 border">Target Tingkat</th>
@@ -162,21 +152,32 @@
                                 <td class="px-4 py-2 border">
                                     <div class="flex items-center justify-center space-x-3">
                                         <template x-for="tingkat in ['10', '11', '12']" :key="tingkat">
-                                            <label class="flex items-center space-x-1 text-sm">
+                                            <label class="flex items-center space-x-1 text-sm" :title="mapel.used_levels && mapel.used_levels.includes(tingkat) ? 'Tingkat ini sedang digunakan (terkunci)' : ''">
                                                 <input type="checkbox" 
                                                     :checked="mapel.tingkat && mapel.tingkat.includes(tingkat)"
                                                     @change="toggleTingkat(mapel, tingkat, $event.target.checked)"
-                                                    class="w-4 h-4 text-blue-600 border-gray-300 rounded">
-                                                <span class="bg-blue-100 px-2 py-0.5 rounded" x-text="tingkat"></span>
+                                                    :disabled="mapel.used_levels && mapel.used_levels.includes(tingkat)"
+                                                    class="w-4 h-4 text-blue-600 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                                                <span class="bg-blue-100 px-2 py-0.5 rounded" x-text="tingkat" :class="{'opacity-50': mapel.used_levels && mapel.used_levels.includes(tingkat)}"></span>
                                             </label>
                                         </template>
                                     </div>
                                 </td>
                                 <td class="px-4 py-2 text-center border">
-                                    <button @click="deleteMapel(mapel.id)" 
-                                        class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600">
-                                        <i class="fas fa-times"></i>
-                                    </button>
+                                    <template x-if="mapel.guru_mapels_count > 0">
+                                        <button @click="showCannotDeleteInfo()" 
+                                            class="bg-gray-300 text-gray-500 w-8 h-8 rounded-full cursor-not-allowed" 
+                                            title="Mapel tidak dapat dihapus karena sedang digunakan">
+                                            <i class="fas fa-lock"></i>
+                                        </button>
+                                    </template>
+                                    <template x-if="!mapel.guru_mapels_count || mapel.guru_mapels_count == 0">
+                                        <button @click="deleteMapel(mapel.id)" 
+                                            class="bg-red-500 text-white w-8 h-8 rounded-full hover:bg-red-600"
+                                            title="Hapus Mapel">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </template>
                                 </td>
                             </tr>
                         </template>
@@ -242,33 +243,28 @@ function mapelData() {
             });
         },
 
-        addKelompok(jenis) {
-            const newKelompok = {
-                id: jenis + '_' + Date.now(),
-                nama: 'Kelompok ' + (jenis.toUpperCase()),
-                jenis: jenis,
-                mapels: []
-            };
-            
-            this.kelompokMapels.push(newKelompok);
-            this.newMapel[newKelompok.id] = {
-                nama_mapel: '',
-                jjm: 0,
-                tingkat: []
-            };
-        },
-
-        deleteKelompok(kelompokId) {
-            if (confirm('Apakah Anda yakin ingin menghapus kelompok ini?')) {
-                this.kelompokMapels = this.kelompokMapels.filter(k => k.id !== kelompokId);
-            }
+        showCannotDeleteInfo() {
+            Swal.fire({
+                icon: 'info',
+                title: 'Tidak Dapat Dihapus',
+                text: 'Mata pelajaran ini sedang digunakan (memiliki relasi dengan guru/kelas/jadwal).',
+                confirmButtonColor: '#3085d6',
+            });
         },
 
         async addMapel(kelompokId) {
             const formData = this.newMapel[kelompokId];
 
             if (!formData.nama_mapel) {
-                alert('Nama mapel harus diisi');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Validasi',
+                    text: 'Nama mapel harus diisi',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000
+                });
                 return;
             }
 
@@ -291,6 +287,8 @@ function mapelData() {
                 if (response.ok) {
                     const kelompok = this.kelompokMapels.find(k => k.id === kelompokId);
                     if (kelompok) {
+                        // Add guru_mapels_count = 0 for new item
+                        result.data.guru_mapels_count = 0;
                         kelompok.mapels.push(result.data);
                     }
 
@@ -300,22 +298,33 @@ function mapelData() {
                         tingkat: []
                     };
 
-                    alert(result.message);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil',
+                        text: result.message,
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000
+                    });
                 } else {
-                    // Show detailed error
+                    let errorMsg = result.message || 'Gagal menambahkan mapel';
                     if (result.errors) {
-                        let errorMsg = 'Validasi gagal:\n';
-                        for (let field in result.errors) {
-                            errorMsg += '- ' + result.errors[field].join(', ') + '\n';
-                        }
-                        alert(errorMsg);
-                    } else {
-                        alert(result.message || 'Gagal menambahkan mapel');
+                        errorMsg = Object.values(result.errors).flat().join('\n');
                     }
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal',
+                        text: errorMsg
+                    });
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Terjadi kesalahan saat menambahkan mapel: ' + error.message);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Terjadi kesalahan sistem'
+                });
             }
         },
 
@@ -336,19 +345,45 @@ function mapelData() {
 
                 const result = await response.json();
 
-                if (!response.ok) {
-                    alert(result.message || 'Gagal memperbarui mapel');
+                if (response.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Tersimpan',
+                        text: 'Perubahan berhasil disimpan',
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 1500
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal',
+                        text: result.message || 'Gagal memperbarui mapel',
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000
+                    });
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Terjadi kesalahan saat memperbarui mapel');
             }
         },
 
         async deleteMapel(mapelId) {
-            if (!confirm('Apakah Anda yakin ingin menghapus mapel ini?')) {
-                return;
-            }
+            const result = await Swal.fire({
+                title: 'Apakah Anda yakin?',
+                text: "Mapel yang dihapus tidak dapat dikembalikan!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Hapus!',
+                cancelButtonText: 'Batal'
+            });
+
+            if (!result.isConfirmed) return;
 
             try {
                 const response = await fetch(`{{ url('akademik/mapel') }}/${mapelId}`, {
@@ -358,19 +393,33 @@ function mapelData() {
                     }
                 });
 
-                const result = await response.json();
+                const resJson = await response.json();
 
                 if (response.ok) {
                     this.kelompokMapels.forEach(kelompok => {
                         kelompok.mapels = kelompok.mapels.filter(m => m.id !== mapelId);
                     });
-                    alert(result.message);
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Terhapus!',
+                        text: resJson.message,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
                 } else {
-                    alert(result.message || 'Gagal menghapus mapel');
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal',
+                        text: resJson.message || 'Gagal menghapus mapel'
+                    });
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Terjadi kesalahan saat menghapus mapel');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Terjadi kesalahan sistem'
+                });
             }
         },
 

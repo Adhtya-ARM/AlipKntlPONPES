@@ -170,7 +170,6 @@
                                             </div>
                                         @endforeach
                                     </div>
-                                    <div class="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
                                 </div>
                             @endif
                         </div>
@@ -222,6 +221,49 @@
         {{-- Right Column: Aksi Cepat, Daftar Mapel & Nilai Terbaru --}}
         <div class="lg:col-span-2 space-y-6">
             
+            {{-- Jadwal Pelajaran Hari Ini --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                <div class="p-5 bg-gradient-to-r from-green-600 to-green-500 text-white">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <i class="fas fa-calendar-day"></i>
+                        Jadwal Pelajaran Hari Ini - {{ $hariIni }}
+                    </h2>
+                    <p class="text-green-100 text-sm mt-1">{{ now()->translatedFormat('d F Y') }}</p>
+                </div>
+                
+                @if($jadwalHariIni->isEmpty())
+                    <div class="p-8 text-center text-gray-500">
+                        <div class="text-5xl mb-3">📚</div>
+                        <p class="text-sm">Tidak ada jadwal pelajaran hari ini</p>
+                        <p class="text-xs text-gray-400 mt-1">Gunakan waktu untuk belajar mandiri!</p>
+                    </div>
+                @else
+                    <div class="p-5 space-y-3 max-h-96 overflow-y-auto">
+                        @foreach($jadwalHariIni as $jadwal)
+                            <div class="bg-gradient-to-r from-green-50 to-white p-4 rounded-xl border-l-4 border-green-600 hover:shadow-md transition">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-14 h-14 bg-green-600 rounded-lg flex flex-col items-center justify-center text-white">
+                                            <div class="text-xs font-semibold">Jam</div>
+                                            <div class="text-xl font-bold">{{ $jadwal->jam_ke }}</div>
+                                        </div>
+                                        <div>
+                                            <div class="font-bold text-gray-800">{{ $jadwal->mapel->nama_mapel }}</div>
+                                            <div class="text-sm text-gray-600">{{ $jadwal->guruProfile->nama ?? 'Guru' }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-green-700">
+                                            {{ date('H:i', strtotime($jadwal->jam_mulai)) }} - {{ date('H:i', strtotime($jadwal->jam_selesai)) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+
             {{-- Aksi Cepat --}}
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
                 <h2 class="text-lg font-bold text-gray-800 mb-4">Aksi Cepat</h2>
@@ -273,21 +315,6 @@
                         <div class="inline-block p-4 rounded-full bg-gray-50 mb-3">
                             <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                            </svg>
-                        </div>
-                        <p class="text-gray-500">Belum ada mata pelajaran terdaftar.</p>
-                    </div>
-                @else
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mata Pelajaran</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Guru Pengampu</th>
-                                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">JJM</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
                                 @foreach($mapels as $gm)
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap">
