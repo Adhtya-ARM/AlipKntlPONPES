@@ -20,17 +20,29 @@ class GuruMapelController extends Controller
     public function index()
     {
         $guru = Auth::guard('guru')->user();
+        $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
         
         // Ambil mapel yang sudah dipilih guru dengan informasi lengkap
-        $guruMapels = GuruMapel::with(['mapel', 'kelas.santriProfile'])
+        // IMPORTANT: Only show NON-ARCHIVED semesters
+        $query = GuruMapel::with(['mapel', 'kelas.santriProfile', 'tahunAjaran'])
             ->where('guru_profile_id', $guru->id)
-            ->get();
+            ->whereHas('tahunAjaran', function ($q) {
+                $q->notArchived(); // Exclude archived semesters  
+            });
+            
+        if ($activeYear) {
+            $query->where('tahun_ajaran_id', $activeYear->id);
+        }
+        
+        $guruMapels = $query->get();
         
         // Hitung statistik untuk setiap mapel
         $guruMapels = $guruMapels->map(function($gm) {
             // Hitung jumlah siswa aktif
             $jumlahSiswa = $gm->kelas->santriProfile()
-                ->where('status', 'aktif')
+                ->whereHas('kelasAktif', function($q) use ($gm) {
+                    $q->where('kelas_id', $gm->kelas_id);
+                })
                 ->count();
             
             // Hitung jumlah pertemuan (absensi yang sudah diinput)
@@ -59,8 +71,17 @@ class GuruMapelController extends Controller
         // Ambil semua mapel untuk dropdown
         $mapels = Mapel::orderBy('nama_mapel')->get();
         
-        // Ambil semua kelas untuk dropdown
-        $kelas = Kelas::orderBy('level')->get();
+        // Ambil kelas untuk dropdown, filtered by jenjang if active year has specific jenjang
+        $kelasQuery = Kelas::orderBy('level');
+        if ($activeYear && $activeYear->jenjang && $activeYear->jenjang !== 'Semua') {
+            // Filter kelas based on jenjang
+            if ($activeYear->jenjang === 'SMP') {
+                $kelasQuery->where('level', '<=', 9);
+            } else if ($activeYear->jenjang === 'SMA') {
+                $kelasQuery->where('level', '>=', 10);
+            }
+        }
+        $kelas = $kelasQuery->get();
         
         return view('User.Guru.MapelSaya.index', compact('guruMapels', 'mapels', 'kelas'));
     }
@@ -73,23 +94,34 @@ class GuruMapelController extends Controller
         $validated = $request->validate([
             'mapel_id' => 'required|exists:mapel,id',
             'kelas_id' => 'required|exists:kelas,id',
-            'semester' => 'required|in:ganjil,genap',
-            'tahun_ajaran' => 'required|string'
         ]);
 
         $guru = Auth::guard('guru')->user();
+        $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
+
+        if (!$activeYear) {
+            return response()->json([
+                'message' => 'Tidak ada tahun ajaran aktif. Hubungi admin.'
+            ], 400);
+        }
+
+        // Prevent operations on archived semesters
+        if ($activeYear->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat menambah mapel pada semester terarsip. Semester ini bersifat read-only.'
+            ], 403);
+        }
 
         // Cek apakah sudah ada kombinasi mapel + kelas yang sama
         $exists = GuruMapel::where('guru_profile_id', $guru->id)
             ->where('mapel_id', $validated['mapel_id'])
             ->where('kelas_id', $validated['kelas_id'])
-            ->where('semester', $validated['semester'])
-            ->where('tahun_ajaran', $validated['tahun_ajaran'])
+            ->where('tahun_ajaran_id', $activeYear->id)
             ->exists();
 
         if ($exists) {
             return response()->json([
-                'message' => 'Anda sudah mengajar mapel ini di kelas tersebut'
+                'message' => 'Anda sudah mengajar mapel ini di kelas tersebut pada tahun ajaran aktif'
             ], 400);
         }
 
@@ -97,8 +129,7 @@ class GuruMapelController extends Controller
             'guru_profile_id' => $guru->id,
             'mapel_id' => $validated['mapel_id'],
             'kelas_id' => $validated['kelas_id'],
-            'semester' => $validated['semester'],
-            'tahun_ajaran' => $validated['tahun_ajaran']
+            'tahun_ajaran_id' => $activeYear->id
         ]);
 
         return response()->json([
@@ -115,6 +146,14 @@ class GuruMapelController extends Controller
         if ($guruMapel->guru_profile_id != $guru->id) {
             return response()->json([
                 'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        // Load tahunAjaran relationship and check if archived
+        $guruMapel->load('tahunAjaran');
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat menghapus mapel dari semester terarsip. Data semester ini bersifat read-only.'
             ], 403);
         }
 
@@ -145,6 +184,14 @@ class GuruMapelController extends Controller
             ], 403);
         }
 
+        // Load tahunAjaran and check if archived
+        $guruMapel->load('tahunAjaran');
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat menghapus nilai dari semester terarsip. Data semester ini bersifat read-only.'
+            ], 403);
+        }
+
         $count = $guruMapel->penilaians()->count();
         $guruMapel->penilaians()->delete();
 
@@ -156,27 +203,32 @@ class GuruMapelController extends Controller
     /**
      * Tampilkan rekap mapel (nilai dan kehadiran siswa)
      */
+    /**
+     * Tampilkan rekap mapel (nilai dan kehadiran siswa)
+     */
     public function rekap($guruMapelId)
     {
         $guru = Auth::guard('guru')->user();
 
-        $guruMapel = GuruMapel::with(['mapel', 'kelas'])
+        $guruMapel = GuruMapel::with(['mapel', 'kelas', 'tahunAjaran'])
             ->where('id', $guruMapelId)
             ->where('guru_profile_id', $guru->id)
             ->firstOrFail();
 
-        // Ambil siswa dari kelas tersebut dengan nilai dan kehadiran
-        $siswa = SantriProfile::whereHas('kelasAktif', function($q) use ($guruMapel) {
-                $q->where('kelas_id', $guruMapel->kelas_id);
+        // Ambil siswa dari kelas tersebut dengan nilai dan kehadiran pada tahun ajaran tersebut
+        $siswa = SantriProfile::whereHas('riwayatKelas', function($q) use ($guruMapel) {
+                $q->where('kelas_id', $guruMapel->kelas_id)
+                  ->where('tahun_ajaran_id', $guruMapel->tahun_ajaran_id);
             })
             ->with([
-                'kelasAktif.kelas',
                 'santri', 
                 'penilaians' => function($q) use ($guruMapelId) {
                     $q->where('guru_mapel_id', $guruMapelId);
                 },
                 'absensis' => function($q) use ($guruMapel) {
-                    $q->where('kelas_id', $guruMapel->kelas_id);
+                    $q->where('kelas_id', $guruMapel->kelas_id)
+                      ->where('mapel_id', $guruMapel->mapel_id)
+                      ->where('tahun_ajaran_id', $guruMapel->tahun_ajaran_id);
                 }
             ])
             ->orderBy('nama')
@@ -230,6 +282,37 @@ class GuruMapelController extends Controller
             return $s;
         });
 
-        return view('Akademik.guru-mapel.rekap', compact('guruMapel', 'siswa'));
+        return view('User.Guru.MapelSaya.rekap', compact('guruMapel', 'siswa'));
+    }
+
+    /**
+     * Reset semua absensi untuk mapel ini
+     */
+    public function resetAbsensi(GuruMapel $guruMapel)
+    {
+        $guru = Auth::guard('guru')->user();
+
+        if ($guruMapel->guru_profile_id != $guru->id) {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        // Load tahunAjaran and check if archived
+        $guruMapel->load('tahunAjaran');
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat mereset absensi dari semester terarsip. Data semester ini bersifat read-only.'
+            ], 403);
+        }
+
+        $count = Absensi::where('mapel_id', $guruMapel->mapel_id)
+            ->where('kelas_id', $guruMapel->kelas_id)
+            ->where('tahun_ajaran_id', $guruMapel->tahun_ajaran_id)
+            ->delete();
+
+        return response()->json([
+            'message' => "Berhasil menghapus $count data kehadiran."
+        ]);
     }
 }

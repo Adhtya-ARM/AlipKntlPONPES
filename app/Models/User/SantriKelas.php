@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 
 use App\Models\User\SantriProfile;
 use App\Models\Akademik\Kelas;
+use App\Models\Akademik\TahunAjaran;
 
 class SantriKelas extends Model
 {
     use HasFactory;
     protected $table = "santri_kelas";
-    protected $fillable = ["santri_profile_id", "kelas_id", "tahun_ajaran"];
+    protected $fillable = ["santri_profile_id", "kelas_id", "tahun_ajaran_id", "status"];
 
     public function santriProfile()
     {
@@ -23,5 +24,10 @@ class SantriKelas extends Model
     public function kelas()
     {
         return $this->BelongsTo(Kelas::class, "kelas_id");
+    }
+
+    public function tahunAjaran()
+    {
+        return $this->BelongsTo(TahunAjaran::class, "tahun_ajaran_id");
     }
 }

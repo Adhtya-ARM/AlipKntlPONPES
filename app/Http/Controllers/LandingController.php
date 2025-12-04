@@ -15,6 +15,8 @@ class LandingController extends Controller
             ->orderBy('nama')
             ->get();
 
-        return view('Landing Page.index', compact('struktur'));
+        $sekolah = \App\Models\Akademik\SekolahProfile::first();
+
+        return view('Landing Page.index', compact('struktur', 'sekolah'));
     }
 }

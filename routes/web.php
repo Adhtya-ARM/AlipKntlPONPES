@@ -20,6 +20,9 @@ use App\Http\Controllers\Akademik\MapelController;
 use App\Http\Controllers\Akademik\GuruMapelController;
 use App\Http\Controllers\Akademik\RencanaPembelajaranController;
 use App\Http\Controllers\Akademik\JadwalPelajaranController;
+use App\Http\Controllers\Akademik\SekolahProfileController;
+use App\Http\Controllers\Akademik\TahunAjaranController;
+use App\Http\Controllers\Akademik\EraportController;
 
 // === SANTRI & WALI CONTROLLERS ===
 use App\Http\Controllers\Santri\SantriAkademikController;
@@ -41,10 +44,6 @@ Route::post('/logout/{guard}', [AuthController::class, 'logout'])->name('logout'
 // ======================================
 // 🧭 DASHBOARD PER ROLE
 // ======================================
-Route::middleware('auth:guru')->prefix('admin')->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])
-        ->name('admin.dashboard')->defaults('guard', 'guru');
-});
 
 Route::middleware('auth:guru')->prefix('guru')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -100,11 +99,23 @@ Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(f
     Route::delete('guru-mapel/{guruMapel}', [GuruMapelController::class, 'destroy'])->name('guru-mapel.destroy');
     Route::get('guru-mapel/{guruMapel}/rekap', [GuruMapelController::class, 'rekap'])->name('guru-mapel.rekap');
     Route::delete('guru-mapel/{guruMapel}/clear-grades', [GuruMapelController::class, 'clearGrades'])->name('guru-mapel.clear-grades');
+    Route::delete('guru-mapel/{guruMapel}/reset-absensi', [GuruMapelController::class, 'resetAbsensi'])->name('guru-mapel.reset-absensi');
 
+    // --- ARSIP KELAS (Historical Data - Snapshot Based) ---
+    Route::get('arsip', [App\Http\Controllers\Akademik\ArsipController::class, 'index'])->name('arsip.index');
+    Route::get('arsip/{arsip}', [App\Http\Controllers\Akademik\ArsipController::class, 'show'])->name('arsip.show');
+    Route::post('arsip/create', [App\Http\Controllers\Akademik\ArsipController::class, 'createFromForm'])->name('arsip.create');
+    
+    // --- E-RAPORT (Active Students - Current Year) ---
+    Route::get('eraport', [EraportController::class, 'index'])->name('eraport.index');
+    Route::get('eraport/{kelas}/cetak-semua', [EraportController::class, 'cetakSemua'])->name('eraport.cetak-semua');
+    Route::get('eraport/{kelas}/santri/{santri}', [EraportController::class, 'detailSantri'])->name('eraport.detail-santri');
+    Route::get('eraport/{kelas}/santri/{santri}/cetak', [EraportController::class, 'cetakSantri'])->name('eraport.cetak-santri');
+    
     //---- Kelas ---//
-       Route::get('kelas/{kelas}/siswa', [KelasController::class, 'getSiswa'])->name('kelas.siswa');
-       Route::post('kelas/{kelas}/siswa', [KelasController::class, 'updateSiswa'])->name('kelas.siswa.update');
-      Route::resource('kelas', KelasController::class)->parameters(['kelas' => 'kelas']);
+    Route::get('kelas/{kelas}/siswa', [KelasController::class, 'getSiswa'])->name('kelas.siswa');
+    Route::post('kelas/{kelas}/siswa', [KelasController::class, 'updateSiswa'])->name('kelas.siswa.update');
+    Route::resource('kelas', KelasController::class)->parameters(['kelas' => 'kelas']);
     
       // --- Absensi Input Per Mapel ---
       Route::get('absensi', [AbsensiController::class, 'index'])->name('absensi.index');
@@ -131,14 +142,34 @@ Route::middleware(['auth:guru'])->prefix('akademik')->name('akademik.')->group(f
 
     // --- Kelas Saya (Guru) ---
     Route::get('kelas-saya', [GuruAkademikController::class, 'kelasSaya'])->name('kelas-saya.index');
-    });
 
+    // --- Teacher Archive (Historical Data - Read-Only) ---
+    Route::get('guru/arsip', [\App\Http\Controllers\User\GuruArsipController::class, 'index'])->name('guru.arsip.index');
+    Route::get('guru/arsip/semester/{semester}', [\App\Http\Controllers\User\GuruArsipController::class, 'show'])->name('guru.arsip.show');
+    Route::get('guru/arsip/detail/{guruMapel}', [\App\Http\Controllers\User\GuruArsipController::class, 'detail'])->name('guru.arsip.detail');
+    });
 // ======================================
 // ℹ️ INFORMASI SEKOLAH
 // ======================================
 Route::middleware(['auth:guru'])->prefix('informasi')->name('informasi.')->group(function () {
     Route::get('struktur-organisasi', [\App\Http\Controllers\Informasi\StrukturOrganisasiController::class, 'index'])->name('struktur-organisasi.index');
     Route::post('struktur-organisasi/update', [\App\Http\Controllers\Informasi\StrukturOrganisasiController::class, 'update'])->name('struktur-organisasi.update');
+});
+
+// ======================================
+// 🏫 MANAJEMEN SEKOLAH (Waka/Kepsek)
+// ======================================
+Route::middleware(['auth:guru'])->prefix('manajemen-sekolah')->name('manajemen-sekolah.')->group(function () {
+    // Profil Sekolah
+    Route::get('sekolah', [SekolahProfileController::class, 'index'])->name('sekolah.index');
+    Route::put('sekolah', [SekolahProfileController::class, 'update'])->name('sekolah.update');
+
+    // Tahun Ajaran
+    Route::post('tahun-ajaran/{tahunAjaran}/activate', [TahunAjaranController::class, 'activate'])->name('tahun-ajaran.activate');
+    Route::resource('tahun-ajaran', TahunAjaranController::class);
+    Route::get('kenaikan-kelas', [\App\Http\Controllers\Akademik\KenaikanKelasController::class, 'index'])->name('kenaikan-kelas.index');
+    Route::get('kenaikan-kelas/get-santri', [\App\Http\Controllers\Akademik\KenaikanKelasController::class, 'getSantri'])->name('kenaikan-kelas.getSantri');
+    Route::post('kenaikan-kelas', [\App\Http\Controllers\Akademik\KenaikanKelasController::class, 'process'])->name('kenaikan-kelas.process');
 });
 
 // ======================================

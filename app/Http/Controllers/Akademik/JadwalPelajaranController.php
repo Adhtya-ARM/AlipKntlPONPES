@@ -67,17 +67,23 @@ class JadwalPelajaranController extends Controller
     }
 
     /**
-     * Get GuruMapels based on Kelas and Mapel
+     * Get GuruMapels based on Kelas and Mapel (for active academic year)
      */
     public function getGuruMapels(Request $request)
     {
         $kelasId = $request->kelas_id;
         $mapelId = $request->mapel_id;
+        $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
 
-        $guruMapels = GuruMapel::with('guruProfile')
+        $query = GuruMapel::with('guruProfile')
             ->where('kelas_id', $kelasId)
-            ->where('mapel_id', $mapelId)
-            ->get();
+            ->where('mapel_id', $mapelId);
+        
+        if ($activeYear) {
+            $query->where('tahun_ajaran_id', $activeYear->id);
+        }
+
+        $guruMapels = $query->get();
 
         return response()->json($guruMapels);
     }
@@ -94,57 +100,106 @@ class JadwalPelajaranController extends Controller
         }
 
         $validated = $request->validate([
-            'guru_mapel_id' => 'required|exists:guru_mapel,id',
+            'jenis_kegiatan' => 'required|in:KBM,Upacara,Apel,Istirahat,Ekstrakurikuler,Lainnya',
             'hari' => 'required|in:Senin,Selasa,Rabu,Kamis,Jumat,Sabtu',
             'jam_ke' => 'required|integer|min:1|max:12',
             'jam_mulai' => 'required',
             'jam_selesai' => 'required',
+            // Conditional validation
+            'guru_mapel_id' => 'required_if:jenis_kegiatan,KBM|nullable|exists:guru_mapel,id',
+            'nama_kegiatan' => 'required_unless:jenis_kegiatan,KBM|nullable|string|max:255',
+            'jenjang' => 'required_unless:jenis_kegiatan,KBM|nullable|in:SMP,SMA',
         ]);
 
-        // Get GuruMapel data
-        $guruMapel = GuruMapel::with(['kelas', 'mapel', 'guruProfile'])->findOrFail($validated['guru_mapel_id']);
-
-        // Check for conflicts (same class, day, period)
-        $conflict = JadwalPelajaran::where('kelas_id', $guruMapel->kelas_id)
-            ->where('hari', $validated['hari'])
-            ->where('jam_ke', $validated['jam_ke'])
-            ->exists();
-
-        if ($conflict) {
-            return response()->json([
-                'message' => 'Bentrok! Kelas ini sudah ada jadwal di hari dan jam yang sama.'
-            ], 400);
+        $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
+        if (!$activeYear) {
+            return response()->json(['message' => 'Tidak ada tahun ajaran aktif'], 400);
         }
 
-        // Check for teacher conflicts
-        $teacherConflict = JadwalPelajaran::where('guru_profile_id', $guruMapel->guru_profile_id)
-            ->where('hari', $validated['hari'])
-            ->where('jam_ke', $validated['jam_ke'])
-            ->exists();
+        // --- LOGIC FOR KBM (CLASSROOM LEARNING) ---
+        if ($validated['jenis_kegiatan'] === 'KBM') {
+            $guruMapel = GuruMapel::with(['kelas', 'mapel', 'guruProfile', 'tahunAjaran'])->findOrFail($validated['guru_mapel_id']);
+            
+            // Check conflicts
+            $this->checkConflicts($guruMapel->kelas_id, $validated['hari'], $validated['jam_mulai'], $validated['jam_selesai'], null, $guruMapel->guru_profile_id);
 
-        if ($teacherConflict) {
-            return response()->json([
-                'message' => 'Bentrok! Guru ini sudah mengajar di kelas lain pada hari dan jam yang sama.'
-            ], 400);
+            $jadwal = JadwalPelajaran::create([
+                'jenis_kegiatan' => 'KBM',
+                'guru_mapel_id' => $validated['guru_mapel_id'],
+                'kelas_id' => $guruMapel->kelas_id,
+                'mapel_id' => $guruMapel->mapel_id,
+                'guru_profile_id' => $guruMapel->guru_profile_id,
+                'hari' => $validated['hari'],
+                'jam_ke' => $validated['jam_ke'],
+                'jam_mulai' => $validated['jam_mulai'],
+                'jam_selesai' => $validated['jam_selesai'],
+                'semester' => $activeYear->semester,
+                'tahun_ajaran' => "{$activeYear->tahun_mulai}/{$activeYear->tahun_selesai}",
+            ]);
+        } 
+        // --- LOGIC FOR NON-KBM (GLOBAL ACTIVITIES) ---
+        else {
+            // Check conflicts (Global activities conflict with everything in that Jenjang)
+            // Note: For simplicity, we might skip strict conflict checks for global events or check against all classes in that jenjang
+            
+            $jadwal = JadwalPelajaran::create([
+                'jenis_kegiatan' => $validated['jenis_kegiatan'],
+                'nama_kegiatan' => $validated['nama_kegiatan'],
+                'jenjang' => $validated['jenjang'],
+                'hari' => $validated['hari'],
+                'jam_ke' => $validated['jam_ke'],
+                'jam_mulai' => $validated['jam_mulai'],
+                'jam_selesai' => $validated['jam_selesai'],
+                'semester' => $activeYear->semester,
+                'tahun_ajaran' => "{$activeYear->tahun_mulai}/{$activeYear->tahun_selesai}",
+            ]);
         }
-
-        $jadwal = JadwalPelajaran::create([
-            'guru_mapel_id' => $validated['guru_mapel_id'],
-            'kelas_id' => $guruMapel->kelas_id,
-            'mapel_id' => $guruMapel->mapel_id,
-            'guru_profile_id' => $guruMapel->guru_profile_id,
-            'hari' => $validated['hari'],
-            'jam_ke' => $validated['jam_ke'],
-            'jam_mulai' => $validated['jam_mulai'],
-            'jam_selesai' => $validated['jam_selesai'],
-            'semester' => $guruMapel->semester,
-            'tahun_ajaran' => $guruMapel->tahun_ajaran,
-        ]);
 
         return response()->json([
             'message' => 'Jadwal berhasil ditambahkan',
             'data' => $jadwal->load(['kelas', 'mapel', 'guruProfile'])
         ], 201);
+    }
+
+    private function checkConflicts($kelasId, $hari, $jamMulai, $jamSelesai, $ignoreId = null, $guruProfileId = null)
+    {
+        // 1. Time Overlap in Same Class
+        $timeConflict = JadwalPelajaran::where('kelas_id', $kelasId)
+            ->where('hari', $hari)
+            ->when($ignoreId, fn($q) => $q->where('id', '!=', $ignoreId))
+            ->where(function($q) use ($jamMulai, $jamSelesai) {
+                $q->where(function($q2) use ($jamMulai) {
+                    $q2->where('jam_mulai', '<=', $jamMulai)->where('jam_selesai', '>', $jamMulai);
+                })->orWhere(function($q2) use ($jamSelesai) {
+                    $q2->where('jam_mulai', '<', $jamSelesai)->where('jam_selesai', '>=', $jamSelesai);
+                })->orWhere(function($q2) use ($jamMulai, $jamSelesai) {
+                    $q2->where('jam_mulai', '>=', $jamMulai)->where('jam_selesai', '<=', $jamSelesai);
+                });
+            })->exists();
+
+        if ($timeConflict) {
+            throw new \Exception('Bentrok Waktu! Ada jadwal lain di kelas ini yang waktunya bertabrakan.');
+        }
+
+        // 2. Teacher Conflict
+        if ($guruProfileId) {
+            $teacherConflict = JadwalPelajaran::where('guru_profile_id', $guruProfileId)
+                ->where('hari', $hari)
+                ->when($ignoreId, fn($q) => $q->where('id', '!=', $ignoreId))
+                ->where(function($q) use ($jamMulai, $jamSelesai) {
+                    $q->where(function($q2) use ($jamMulai) {
+                        $q2->where('jam_mulai', '<=', $jamMulai)->where('jam_selesai', '>', $jamMulai);
+                    })->orWhere(function($q2) use ($jamSelesai) {
+                        $q2->where('jam_mulai', '<', $jamSelesai)->where('jam_selesai', '>=', $jamSelesai);
+                    })->orWhere(function($q2) use ($jamMulai, $jamSelesai) {
+                        $q2->where('jam_mulai', '>=', $jamMulai)->where('jam_selesai', '<=', $jamSelesai);
+                    });
+                })->exists();
+
+            if ($teacherConflict) {
+                throw new \Exception('Bentrok Guru! Guru ini sudah mengajar di kelas lain pada waktu yang bertabrakan.');
+            }
+        }
     }
 
     /**
@@ -165,25 +220,22 @@ class JadwalPelajaranController extends Controller
             'jam_selesai' => 'required',
         ]);
 
-        // Check conflicts (excluding current jadwal)
-        $conflict = JadwalPelajaran::where('kelas_id', $jadwalPelajaran->kelas_id)
-            ->where('hari', $validated['hari'])
-            ->where('jam_ke', $validated['jam_ke'])
-            ->where('id', '!=', $jadwalPelajaran->id)
-            ->exists();
+        try {
+            // Only check conflicts if it's a KBM activity or if we want to enforce it for everything
+            if ($jadwalPelajaran->jenis_kegiatan === 'KBM') {
+                $this->checkConflicts($jadwalPelajaran->kelas_id, $validated['hari'], $validated['jam_mulai'], $validated['jam_selesai'], $jadwalPelajaran->id, $jadwalPelajaran->guru_profile_id);
+            }
+            
+            $jadwalPelajaran->update($validated);
 
-        if ($conflict) {
             return response()->json([
-                'message' => 'Bentrok! Sudah ada jadwal di hari dan jam yang sama.'
-            ], 400);
+                'message' => 'Jadwal berhasil diperbarui',
+                'data' => $jadwalPelajaran->load(['kelas', 'mapel', 'guruProfile'])
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
         }
-
-        $jadwalPelajaran->update($validated);
-
-        return response()->json([
-            'message' => 'Jadwal berhasil diperbarui',
-            'data' => $jadwalPelajaran->load(['kelas', 'mapel', 'guruProfile'])
-        ]);
     }
 
     /**

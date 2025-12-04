@@ -13,8 +13,7 @@ return new class extends Migration
     {
         Schema::create('kelas', function (Blueprint $table) {
             $table->id();
-            $table->integer('level'); // Tingkat (10, 11, 12)
-            $table->string('nama_unik')->nullable(); // Nama unik kelas (TTN, TITL, TPEM, dll)
+            $table->integer('level'); 
             $table->foreignId('guru_profile_id')->nullable()->constrained('guru_profile')->onDelete('set null'); // Deprecated, gunakan wali_kelas_id
             $table->foreignId("wali_kelas_id")->nullable()->constrained("guru_profile")->nullOnDelete(); // Wali kelas
             $table->timestamps();

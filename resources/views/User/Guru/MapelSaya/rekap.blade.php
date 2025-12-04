@@ -78,6 +78,9 @@
         <div class="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
             <h2 class="text-lg font-semibold text-gray-800">Rekap Nilai & Kehadiran Siswa</h2>
             <div class="flex gap-2">
+                <button onclick="confirmResetKehadiran()" class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 text-sm">
+                    <i class="fas fa-eraser mr-1"></i> Reset Kehadiran
+                </button>
                 <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
                     <i class="fas fa-file-excel mr-1"></i> Export Excel
                 </button>
@@ -185,4 +188,34 @@
         </div>
     </div>
 </div>
+
+<script>
+function confirmResetKehadiran() {
+    Swal.fire({
+        title: 'Reset Kehadiran?',
+        text: "Semua data kehadiran untuk mapel ini akan dihapus permanen!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Ya, Reset!',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            axios.delete('{{ route("akademik.guru-mapel.reset-absensi", $guruMapel->id) }}', {
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                }
+            })
+            .then(response => {
+                Swal.fire('Berhasil!', response.data.message, 'success')
+                    .then(() => location.reload());
+            })
+            .catch(error => {
+                Swal.fire('Error!', error.response?.data?.message || 'Terjadi kesalahan', 'error');
+            });
+        }
+    });
+}
+</script>
 @endsection

@@ -12,7 +12,23 @@
     
     {{-- ================= HEADER & FILTER AREA ================= --}}
     <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">Kelola Data Siswa</h2>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-2xl font-bold text-gray-800">Kelola Data Siswa</h2>
+            @php
+                $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
+            @endphp
+            @if($activeYear)
+                <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Tahun Ajaran Aktif: <strong>{{ $activeYear->nama }} - {{ $activeYear->semester }}</strong></span>
+                </div>
+            @else
+                <div class="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Tidak ada tahun ajaran aktif</span>
+                </div>
+            @endif
+        </div>
         
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             
@@ -66,6 +82,7 @@
                     <tr>
                         <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">NISN</th>
                         <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Nama Lengkap</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Jenjang</th>
                         <th class="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Kelas</th>
                         <th class="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-4 py-3 text-center font-bold text-gray-500 uppercase tracking-wider">Aksi</th>
@@ -76,8 +93,10 @@
                         @php
                             $profile = $santri->santriprofile ?? null;
                             
-                            $kelasObj = $profile->santriKelas->kelas ?? null; 
+                            // Prefer the active class for display (kelasAktif) which filters by active tahun ajaran
+                            $kelasObj = $profile->kelasAktif ? ($profile->kelasAktif->kelas ?? null) : ($profile->santriKelas?->kelas ?? null);
                             $namaKelas = $kelasObj->level ?? '-';
+                            $jenjang = $profile->jenjang ?? '-';
                             
                             $waliName = $profile->waliProfile->nama ?? '-';
                             
@@ -104,6 +123,11 @@
                             <td class="px-4 py-3 font-medium text-gray-900">
                                 {{ $profile->nama ?? '-' }}
                                 <div class="text-xs text-gray-400 mt-0.5">{{ $waliName }} (Wali)</div>
+                            </td>
+                            <td class="px-4 py-3 text-gray-600">
+                                <span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-medium border border-indigo-200">
+                                    {{ $jenjang }}
+                                </span>
                             </td>
                             <td class="px-4 py-3 text-gray-600">
                                 <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs border border-gray-200">
@@ -176,6 +200,16 @@
                     <label class="block text-xs font-bold text-gray-700 mb-1">Nama Lengkap <span class="text-red-500">*</span></label>
                     <input type="text" x-model="formData.nama" required class="w-full border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3">
                 </div>
+
+                {{-- Input Jenjang --}}
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Jenjang <span class="text-red-500">*</span></label>
+                    <select x-model="formData.jenjang" required class="w-full border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3">
+                        <option value="">-- Pilih Jenjang --</option>
+                        <option value="SMP">SMP (Kelas 7-9)</option>
+                        <option value="SMA">SMA (Kelas 10-12)</option>
+                    </select>
+                </div>
                 
                 {{-- Input No HP --}}
                 <div>
@@ -230,44 +264,6 @@
                     </div>
                 </div>
 
-                {{-- Dropdown Kelas --}}
-                <div class="relative" 
-                     x-data='dropdownSearch({ 
-                         items: @json($kelas), 
-                         initialId: formData.kelas_id, 
-                         initialName: formData.kelas_name 
-                     })'
-                     @click.outside="open = false">
-                    
-                    <label class="block text-xs font-bold text-gray-700 mb-1">Kelas <span class="text-red-500">*</span></label>
-                    
-                    <div class="relative" :class="{'opacity-50 pointer-events-none': isLocked}">
-                        <input type="text" 
-                                x-model="search" 
-                                @focus="open = true"
-                                @input="open = true"
-                                @keydown.escape="open = false"
-                                placeholder="Pilih atau cari kelas..." 
-                                class="w-full rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-3" 
-                                autocomplete="off"
-                                :disabled="isLocked">
-                                
-                        <div x-show="open" 
-                             x-transition
-                             class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                           <template x-for="item in filteredItems" :key="item.id">
-                                <div @click="select(item); formData.kelas_id = item.id; formData.kelas_name = item.nama" 
-                                     class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-gray-700 text-sm border-b border-gray-50 last:border-0">
-                                    <span x-text="item.nama"></span>
-                                </div>
-                           </template>
-                        </div>
-                    </div>
-                    <p x-show="isLocked" class="text-[10px] text-red-500 mt-1 flex items-center gap-1">
-                        <i class="fas fa-lock"></i> Kelas terkunci karena ada data akademik terkait.
-                    </p>
-                </div>
-
                 {{-- Input Alamat --}}
                 <div class="md:col-span-2">
                     <label class="block text-xs font-bold text-gray-700 mb-1">Alamat</label>
@@ -298,10 +294,10 @@
             
             formData: {
                 id: null,
-                nisn: '', nama: '', no_hp: '', alamat: '', status: 'aktif',
+                nisn: '', nama: '', jenjang: '', no_hp: '', alamat: '', status: 'aktif',
                 password: '',
-                wali_id: null, wali_name: '', 
-                kelas_id: null, kelas_name: ''
+                wali_id: null, wali_name: ''
+                // REMOVED: kelas_id and kelas_name
             },
 
             openCreateModal() {
@@ -321,24 +317,18 @@
                 // Cek relasi untuk lock kelas
                 this.isLocked = data.has_relations;
 
-                let namaKelas = '';
-                if(data.santriprofile?.santri_kelas?.kelas) {
-                    const k = data.santriprofile.santri_kelas.kelas;
-                    namaKelas = k.level; 
-                }
-
                 this.formData = {
                     id: data.id,
                     nisn: data.nisn,
                     nama: data.santriprofile?.nama || '',
+                    jenjang: data.santriprofile?.jenjang || '',
                     no_hp: data.santriprofile?.no_hp || '',
                     alamat: data.santriprofile?.alamat || '',
                     status: data.santriprofile?.status || 'aktif',
                     password: '', 
                     wali_id: data.santriprofile?.wali_profile_id,
-                    wali_name: data.santriprofile?.wali_profile?.nama || '',
-                    kelas_id: data.santriprofile?.santri_kelas?.kelas_id,
-                    kelas_name: namaKelas
+                    wali_name: data.santriprofile?.wali_profile?.nama || ''
+                    // REMOVED: kelas_id and kelas_name
                 };
                 this.isModalOpen = true;
             },
@@ -346,9 +336,10 @@
             resetForm() {
                 this.formData = {
                     id: null,
-                    nisn: '', nama: '', no_hp: '', alamat: '', status: 'aktif',
+                    nisn: '', nama: '', jenjang: '', no_hp: '', alamat: '', status: 'aktif',
                     password: '', 
-                    wali_id: null, wali_name: '', kelas_id: null, kelas_name: ''
+                    wali_id: null, wali_name: ''
+                    // REMOVED: kelas_id and kelas_name
                 };
             },
 
@@ -361,12 +352,13 @@
                             username: this.formData.nisn, // Username = NISN
                             nisn: this.formData.nisn,
                             nama: this.formData.nama,
+                            jenjang: this.formData.jenjang,
                             no_hp: this.formData.no_hp,
                             alamat: this.formData.alamat,
                             status: this.formData.status,
                             password: this.formData.password,
-                            wali_profile_id: this.formData.wali_id,
-                            kelas_id: this.formData.kelas_id
+                            wali_profile_id: this.formData.wali_id
+                            // REMOVED: kelas_id
                         }
                     });
 

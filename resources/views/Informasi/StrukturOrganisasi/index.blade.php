@@ -69,6 +69,14 @@
                             {{ $guru->tampilkan_di_landing ? 'Ditampilkan' : 'Tidak Ditampilkan' }}
                         </span>
                     </div>
+
+                    <div class="mt-3 flex justify-center gap-2">
+                        @if($guru->guru)
+                        <a href="{{ route('guru.edit', $guru->guru->id) }}" class="px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">
+                            <i class="fas fa-user-edit mr-2"></i> Edit Profil Guru
+                        </a>
+                        @endif
+                    </div>
                 </div>
             </div>
             @empty

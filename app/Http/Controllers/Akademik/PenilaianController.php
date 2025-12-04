@@ -32,8 +32,12 @@ class PenilaianController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
+        // IMPORTANT: Only show GuruMapel from NON-ARCHIVED semesters
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level', 'tahunAjaran'])
             ->where('guru_profile_id', $guruProfile->id)
+            ->whereHas('tahunAjaran', function ($query) {
+                $query->notArchived(); // Exclude archived semesters
+            })
             ->get();
             
         $preSelectedMapelId = $request->query('guru_mapel_id');
@@ -101,6 +105,14 @@ class PenilaianController extends Controller
         $guruMapelId = $validated['guru_mapel_id'];
         $tanggal = $validated['tanggal_penilaian'];
         $jenis = $validated['jenis_penilaian'];
+
+        // Check if semester is archived
+        $guruMapel = GuruMapel::with('tahunAjaran')->findOrFail($guruMapelId);
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat menginput nilai pada semester terarsip. Data semester ini bersifat read-only.'
+            ], 403);
+        }
 
         try {
             DB::beginTransaction();
@@ -171,8 +183,12 @@ class PenilaianController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
 
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
+        // IMPORTANT: Only show GuruMapel from NON-ARCHIVED semesters
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level', 'tahunAjaran'])
             ->where('guru_profile_id', $guruProfile->id)
+            ->whereHas('tahunAjaran', function ($query) {
+                $query->notArchived(); // Exclude archived semesters
+            })
             ->get();
 
         return view('Akademik.Rekap.Penilaian.index', compact('guruMapels'));

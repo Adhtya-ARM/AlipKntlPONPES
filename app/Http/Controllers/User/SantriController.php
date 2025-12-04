@@ -26,7 +26,7 @@ public function index(Request $request)
     // 1. Mulai Query Builder
     $query = Santri::with([
         "santriprofile" => function($q) {
-            $q->with(['waliProfile', 'santriKelas.kelas'])
+            $q->with(['waliProfile', 'santriKelas.kelas', 'kelasAktif.kelas'])
               ->withCount(['absensis', 'penilaians']);
         }
     ]);
@@ -84,18 +84,19 @@ public function index(Request $request)
             abort(403, 'Akses Ditolak. Hanya Kepala Sekolah atau Wakil Kepala Sekolah yang dapat mengelola data ini.');
         }
 
-        // 1. Validasi Input
+        // 1. Validasi Input (REMOVE kelas_id validation)
         $validatedData = $request->validate([
             "username" => "required|string|unique:santris,username|max:50",
-            "password" => "required|string|min:8", // Hapus confirmed
+            "password" => "required|string|min:8",
             "nisn" => "required|string|unique:santris,nisn|max:20",
 
             // Data Profile Santri
             "nama" => "required|string|max:255",
+            "jenjang" => "required|in:SMP,SMA",
             "alamat" => "nullable|string|max:255",
             "no_hp" => "nullable|string|max:20",
             "wali_profile_id" => "nullable|exists:wali_profile,id",
-            "kelas_id" => "nullable|exists:kelas,id", // Tambahkan validasi kelas_id saat create
+            // REMOVED: "kelas_id" validation
         ]);
 
         // 2. Gunakan DB Transaction
@@ -112,22 +113,19 @@ public function index(Request $request)
             // B. Simpan data ke tabel SantriProfile
             $profile = $santri->santriProfile()->create([
                 "nama" => $validatedData["nama"],
+                "jenjang" => $validatedData["jenjang"],
                 "alamat" => $validatedData["alamat"] ?? null,
                 "no_hp" => $validatedData["no_hp"] ?? null,
                 "wali_profile_id" => $validatedData["wali_profile_id"] ?? null,
                 "status" => 'aktif', // Default active
             ]);
 
-            // C. Assign Kelas jika ada
-            if (!empty($validatedData["kelas_id"])) {
-                $profile->santriKelas()->create([
-                    'kelas_id' => $validatedData["kelas_id"]
-                ]);
-            }
+            // C. REMOVED: Auto-assign class logic
+            // Kelas will be assigned separately via "Kenaikan Kelas" or manual class assignment
 
             DB::commit();
 
-            return response()->json(['message' => "Data Santri **" . $validatedData["nama"] . "** berhasil ditambahkan!"], 200);
+            return response()->json(['message' => "Data Santri **" . $validatedData["nama"] . "** berhasil ditambahkan! Silakan assign kelas melalui menu Kenaikan Kelas."], 200);
 
         } catch (\Exception $e) {
             DB::rollback();
@@ -158,7 +156,7 @@ public function index(Request $request)
                 "max:50",
                 Rule::unique('santris')->ignore($santri->id),
             ],
-            "password" => "nullable|string|min:8", // Hapus confirmed
+            "password" => "nullable|string|min:8",
             "nisn" => [
                 "required",
                 "string",
@@ -168,11 +166,12 @@ public function index(Request $request)
 
             // Data Profile Santri
             "nama" => "required|string|max:255",
+            "jenjang" => "required|in:SMP,SMA",
             "alamat" => "nullable|string|max:255",
             "no_hp" => "nullable|string|max:20",
             "wali_profile_id" => "nullable|exists:wali_profile,id",
             "status" => "required|in:aktif,non-aktif,lulus,dropout",
-            "kelas_id" => "nullable|exists:kelas,id",
+            "kelas_id" => "nullable|exists:kelas,id", // Restored validation
         ]);
 
         // 2. Gunakan DB Transaction
@@ -194,28 +193,27 @@ public function index(Request $request)
             // B. Update data tabel SantriProfile
             $santri->santriProfile()->update([
                 "nama" => $validatedData["nama"],
+                "jenjang" => $validatedData["jenjang"],
                 "alamat" => $validatedData["alamat"] ?? null,
                 "no_hp" => $validatedData["no_hp"] ?? null,
                 "wali_profile_id" => $validatedData["wali_profile_id"] ?? null,
                 "status" => $validatedData["status"],
             ]);
 
-            // C. Update data Kelas (SantriKelas)
-            // Cek apakah kelas dikunci (ada relasi)
-            $isLocked = $santri->santriProfile->absensis()->exists() || $santri->santriProfile->penilaians()->exists();
-            
-            if (!$isLocked) {
-                if (!empty($validatedData["kelas_id"])) {
-                    $santriKelas = $santri->santriProfile->santriKelas;
-                    
-                    if ($santriKelas) {
-                        $santriKelas->update(['kelas_id' => $validatedData["kelas_id"]]);
-                    } else {
-                        $santri->santriProfile->santriKelas()->create(['kelas_id' => $validatedData["kelas_id"]]);
-                    }
-                } else {
-                    // Jika kelas_id dikosongkan, hapus relasi kelas
-                     $santri->santriProfile->santriKelas()->delete();
+            // C. Update Kelas (Manual Move) - Restored Logic
+            if ($request->filled('kelas_id')) {
+                $activeYear = \App\Models\Akademik\TahunAjaran::where('is_active', true)->first();
+                if ($activeYear) {
+                    \App\Models\User\SantriKelas::updateOrCreate(
+                        [
+                            'santri_profile_id' => $santri->santriProfile->id, 
+                            'tahun_ajaran_id' => $activeYear->id
+                        ],
+                        [
+                            'kelas_id' => $validatedData['kelas_id'], 
+                            'status' => 'aktif'
+                        ]
+                    );
                 }
             }
 

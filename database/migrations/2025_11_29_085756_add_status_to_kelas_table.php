@@ -4,18 +4,15 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create("mapel", function (Blueprint $table) {
-            $table->id();
-            $table->string("nama_mapel");
-            $table->string("tingkat");
-            $table->integer("jjm");
-            $table->timestamps();
+        Schema::table('kelas', function (Blueprint $table) {
+            $table->enum('status', ['Aktif', 'Arsip'])->default('Aktif')->after('guru_profile_id');
         });
     }
 
@@ -24,6 +21,8 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists("_mapel");
+        Schema::table('kelas', function (Blueprint $table) {
+            $table->dropColumn('status');
+        });
     }
 };

@@ -22,12 +22,20 @@ class Kelas extends Model
     protected $fillable = [
         'level',
         'guru_profile_id',
+        'status',
     ];
     
     protected function namaDisplay(): Attribute
     {
         return Attribute::make(
             get: fn() => 'Kelas ' . $this->level 
+        );
+    }
+
+    protected function jenjang(): Attribute
+    {
+        return Attribute::make(
+            get: fn() => $this->level <= 9 ? 'SMP' : 'SMA'
         );
     }
 
@@ -47,7 +55,7 @@ class Kelas extends Model
     public function santriProfile()
     {
         return $this->BelongsToMany(SantriProfile::class, 'santri_kelas', 'kelas_id', 'santri_profile_id',)
-            ->withPivot(['tahun_ajaran'])
+            ->withPivot(['tahun_ajaran_id', 'status'])
             ->withTimestamps();
     }
 

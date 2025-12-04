@@ -22,6 +22,7 @@ class SantriProfile extends Model
     protected $fillable = [
         "santri_id",
         "nama",
+        "jenjang",
         "no_hp",
         "wali_profile_id",
         "alamat",
@@ -51,13 +52,20 @@ class SantriProfile extends Model
     
     public function kelasAktif()
     {
-        return $this->HasOne(SantriKelas::class, 'santri_profile_id', 'id');
+        return $this->hasOne(SantriKelas::class, 'santri_profile_id')
+            ->whereHas('tahunAjaran', function($q) {
+                $q->where('is_active', true);
+            })
+            ->where('status', 'Aktif');
     }
     
-    public function kelas()
-       {
-           return $this->BelongsTo(Kelas::class, 'kelas_id');
-       }
+    public function riwayatKelas()
+    {
+        return $this->hasMany(SantriKelas::class, 'santri_profile_id')->orderBy('id', 'desc');
+    }
+
+    // Deprecated: kelas_id does not exist on santri_profile
+    // public function kelas() { ... }
        
        public function waliProfile()
           {

@@ -26,8 +26,7 @@ class GuruMapel extends Model
         'guru_profile_id',
         'mapel_id',
         'kelas_id',
-        'semester',
-        'tahun_ajaran',
+        'tahun_ajaran_id',
     ];
 
     public function mapel()
@@ -65,9 +64,14 @@ class GuruMapel extends Model
                     ->whereColumn('mapel_id', 'guru_mapel.mapel_id');
     }
      
-     public function guruProfile()
-     {
-         return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
-     }
+    public function guruProfile()
+    {
+        return $this->belongsTo(GuruProfile::class, 'guru_profile_id');
+    }
+
+    public function tahunAjaran()
+    {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_ajaran_id');
+    }
 }
 

@@ -31,12 +31,20 @@ class GuruAkademikController extends Controller
             return back()->with('error', 'Profil guru tidak ditemukan.');
         }
         
+        $activeYear = \App\Models\Akademik\TahunAjaran::active()->first();
+
         // Ambil semua GuruMapel milik guru ini dengan relasi lengkap
+        // IMPORTANT: Only show NON-ARCHIVED semesters in active teaching view
         $guruMapels = GuruMapel::where('guru_profile_id', $guruProfile->id)
+            ->whereHas('tahunAjaran', function ($query) {
+                $query->notArchived(); // Exclude archived semesters
+            })
             ->with([
+                'kelas',
                 'kelas.santriKelas', // Load santriKelas collection
                 'kelas.waliKelas',   // Load waliKelas (yang adalah GuruProfile)
-                'mapel'
+                'mapel',
+                'tahunAjaran'
             ])
             ->get();
 
@@ -45,9 +53,28 @@ class GuruAkademikController extends Controller
         
         foreach ($guruMapels as $gm) {
             if (!$gm->kelas) continue;
-            
+
             $kelasId = $gm->kelas->id;
-            
+
+            // Skip if this kelas is archived for the active year (all santri_kelas are 'Arsip')
+            if ($activeYear) {
+                $hasActiveSantri = \App\Models\User\SantriKelas::where('kelas_id', $kelasId)
+                    ->where('tahun_ajaran_id', $activeYear->id)
+                    ->where('status', '!=', 'Arsip')
+                    ->exists();
+
+                // Also allow if there are guru_mapel entries for other years (we only show current teaching assignments)
+                $hasActiveGuruMapel = $guruMapels->where('kelas.id', $kelasId)
+                    ->contains(function($g) use ($activeYear) {
+                        return $g->tahun_ajaran_id == ($activeYear->id ?? null);
+                    });
+
+                if (!$hasActiveSantri && !$hasActiveGuruMapel) {
+                    // Skip this kelas because it's effectively archived for the active year
+                    continue;
+                }
+            }
+
             if (!isset($kelasAjar[$kelasId])) {
                 $kelasAjar[$kelasId] = [
                     'kelas' => $gm->kelas,
@@ -55,7 +82,7 @@ class GuruAkademikController extends Controller
                     'guru_mapels' => collect()
                 ];
             }
-            
+
             // Attach pivot data to mapel
             $mapel = $gm->mapel;
             if ($mapel) {
@@ -65,7 +92,7 @@ class GuruAkademikController extends Controller
                 ];
                 $kelasAjar[$kelasId]['mapels'][] = $mapel;
             }
-            
+
             $kelasAjar[$kelasId]['guru_mapels']->push($gm);
         }
 

@@ -20,7 +20,7 @@
                 <select x-model="selectedKelasId" @change="filterMapel()" class="w-full border-gray-300 rounded-md text-sm">
                     <option value="">-- Pilih Kelas --</option>
                     <template x-for="k in uniqueKelas" :key="k.id">
-                        <option :value="k.id" x-text="`Kelas ${k.level} ''}`"></option>
+                        <option :value="k.id" x-text="`Kelas ${k.level}`"></option>
                     </template>
                 </select>
             </div>

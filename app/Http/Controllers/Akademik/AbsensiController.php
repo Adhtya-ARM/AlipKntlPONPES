@@ -35,8 +35,12 @@ class AbsensiController extends Controller
         }
 
         // Remove nama_unik from query
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
+        // IMPORTANT: Only show GuruMapel from NON-ARCHIVED semesters
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level', 'tahunAjaran'])
             ->where('guru_profile_id', $guruProfile->id)
+            ->whereHas('tahunAjaran', function ($query) {
+                $query->notArchived(); // Exclude archived semesters
+            })
             ->get();
             
         $preSelectedMapelId = $request->query('guru_mapel_id');
@@ -95,8 +99,15 @@ class AbsensiController extends Controller
             'absensi.*.kehadiran' => 'required|string|in:H,I,S,A',
         ]);
 
-        $guruMapel = GuruMapel::findOrFail($validated['guru_mapel_id']);
+        $guruMapel = GuruMapel::with('tahunAjaran')->findOrFail($validated['guru_mapel_id']);
         $tanggal = $validated['tanggal_absensi'];
+
+        // Check if semester is archived
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat menginput absensi pada semester terarsip. Data semester ini bersifat read-only.'
+            ], 403);
+        }
 
         try {
             DB::beginTransaction();
@@ -112,6 +123,7 @@ class AbsensiController extends Controller
                     ],
                     [
                         'kelas_id' => $guruMapel->kelas_id,
+                        'tahun_ajaran_id' => $guruMapel->tahun_ajaran_id,
                         'status' => $status,
                         'keterangan' => null,
                     ]
@@ -134,8 +146,8 @@ class AbsensiController extends Controller
     }
 
     /**
-     * Reset absensi for a specific date and mapel
-     */
+     * Reset absensi for specify date and mapel
+      */
     public function resetAbsensi(Request $request)
     {
         $request->validate([
@@ -143,7 +155,14 @@ class AbsensiController extends Controller
             'tanggal' => 'required|date',
         ]);
 
-        $guruMapel = GuruMapel::findOrFail($request->guru_mapel_id);
+        $guruMapel = GuruMapel::with('tahunAjaran')->findOrFail($request->guru_mapel_id);
+
+        // Check if semester is archived
+        if ($guruMapel->tahunAjaran && $guruMapel->tahunAjaran->isArchived()) {
+            return response()->json([
+                'message' => 'Tidak dapat mereset absensi pada semester terarsip. Data semester ini bersifat read-only.'
+            ], 403);
+        }
 
         try {
             $deleted = Absensi::where('mapel_id', $guruMapel->mapel_id)
@@ -188,8 +207,12 @@ class AbsensiController extends Controller
         $guruProfile = $user->guruProfile;
         
         // Remove nama_unik from query
-        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level'])
+        // IMPORTANT: Only show GuruMapel from NON-ARCHIVED semesters
+        $guruMapels = GuruMapel::with(['mapel:id,nama_mapel', 'kelas:id,level', 'tahunAjaran'])
             ->where('guru_profile_id', $guruProfile->id)
+            ->whereHas('tahunAjaran', function ($query) {
+                $query->notArchived(); // Exclude archived semesters
+            })
             ->get();
 
         return view('Akademik.Rekap.Kehadiran.index', compact('guruMapels'));

@@ -93,11 +93,11 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         <template x-for="jadwal in getFilteredJadwal(selectedHari)" :key="jadwal.id">
-                            <tr class="hover:bg-blue-50 transition group">
+                            <tr class="hover:bg-blue-50 transition group" :class="{'bg-yellow-50': jadwal.jenis_kegiatan !== 'KBM'}">
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <div class="flex items-center gap-2">
-                                        <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
-                                            <span class="text-blue-700 font-bold text-sm" x-text="jadwal.jam_ke"></span>
+                                        <div class="w-8 h-8 rounded-lg flex items-center justify-center transition" :class="jadwal.jenis_kegiatan === 'KBM' ? 'bg-blue-100 group-hover:bg-blue-200' : 'bg-yellow-100 group-hover:bg-yellow-200'">
+                                            <span class="font-bold text-sm" :class="jadwal.jenis_kegiatan === 'KBM' ? 'text-blue-700' : 'text-yellow-700'" x-text="jadwal.jam_ke"></span>
                                         </div>
                                     </div>
                                 </td>
@@ -108,21 +108,43 @@
                                     </div>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                        <span x-text="'Kelas ' + jadwal.kelas.level"></span>
-                                    </span>
+                                    <template x-if="jadwal.jenis_kegiatan === 'KBM'">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <span x-text="'Kelas ' + jadwal.kelas.level"></span>
+                                        </span>
+                                    </template>
+                                    <template x-if="jadwal.jenis_kegiatan !== 'KBM'">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                            <span x-text="jadwal.jenjang || 'Semua'"></span>
+                                        </span>
+                                    </template>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <div class="font-semibold text-gray-800" x-text="jadwal.mapel.nama_mapel"></div>
-                                    <div class="text-xs text-gray-500" x-text="jadwal.semester + ' ' + jadwal.tahun_ajaran"></div>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-xs">
-                                            <i class="fas fa-user text-purple-600"></i>
+                                    <template x-if="jadwal.jenis_kegiatan === 'KBM'">
+                                        <div>
+                                            <div class="font-semibold text-gray-800" x-text="jadwal.mapel.nama_mapel"></div>
+                                            <div class="text-xs text-gray-500" x-text="jadwal.semester + ' ' + jadwal.tahun_ajaran"></div>
                                         </div>
-                                        <span class="text-sm text-gray-700 truncate max-w-[150px]" x-text="jadwal.guru_profile.nama" :title="jadwal.guru_profile.nama"></span>
-                                    </div>
+                                    </template>
+                                    <template x-if="jadwal.jenis_kegiatan !== 'KBM'">
+                                        <div>
+                                            <div class="font-bold text-gray-800" x-text="jadwal.nama_kegiatan || jadwal.jenis_kegiatan"></div>
+                                            <div class="text-xs text-gray-500 italic" x-text="jadwal.jenis_kegiatan"></div>
+                                        </div>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <template x-if="jadwal.jenis_kegiatan === 'KBM'">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-xs">
+                                                <i class="fas fa-user text-purple-600"></i>
+                                            </div>
+                                            <span class="text-sm text-gray-700 truncate max-w-[150px]" x-text="jadwal.guru_profile ? jadwal.guru_profile.nama : '-'" :title="jadwal.guru_profile ? jadwal.guru_profile.nama : ''"></span>
+                                        </div>
+                                    </template>
+                                    <template x-if="jadwal.jenis_kegiatan !== 'KBM'">
+                                        <span class="text-gray-400 text-sm">-</span>
+                                    </template>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-center">
                                     <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -181,42 +203,73 @@
                             </h3>
                             <div class="mt-4">
                                 <div class="grid grid-cols-2 gap-4">
-                                    {{-- Pilih Kelas --}}
-                                    <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">1. Pilih Kelas</label>
-                                        <select x-model="form.kelas_id" @change="loadGuruMapels()" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
-                                            <option value="">-- Pilih Kelas --</option>
-                                            @foreach($kelas as $k)
-                                                <option value="{{ $k->id }}">Kelas {{ $k->level }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-
-                                    {{-- Pilih Mapel --}}
-                                    <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">2. Pilih Mapel</label>
-                                        <select x-model="form.mapel_id" @change="loadGuruMapels()" :disabled="!form.kelas_id" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm disabled:bg-gray-100">
-                                            <option value="">-- Pilih Mapel --</option>
-                                            @foreach($mapels as $m)
-                                                <option value="{{ $m->id }}">{{ $m->nama_mapel }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-
-                                    {{-- Pilih Guru (Auto dari GuruMapel) --}}
+                                    {{-- Jenis Kegiatan --}}
                                     <div class="col-span-2">
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">3. Pilih Guru</label>
-                                        <select x-model="form.guru_mapel_id" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
-                                            <option value="">-- Pilih Guru --</option>
-                                            <template x-for="gm in availableGuruMapels" :key="gm.id">
-                                                <option :value="gm.id" x-text="gm.guru_profile.nama + ' (' + gm.semester + ' - ' + gm.tahun_ajaran + ')'"></option>
-                                            </template>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">Jenis Kegiatan</label>
+                                        <select x-model="form.jenis_kegiatan" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
+                                            <option value="KBM">KBM (Kegiatan Belajar Mengajar)</option>
+                                            <option value="Upacara">Upacara</option>
+                                            <option value="Apel">Apel Pagi</option>
+                                            <option value="Istirahat">Istirahat</option>
+                                            <option value="Ekstrakurikuler">Ekstrakurikuler</option>
+                                            <option value="Lainnya">Lainnya</option>
                                         </select>
+                                    </div>
+
+                                    {{-- FIELDS FOR KBM --}}
+                                    <div class="col-span-2 grid grid-cols-2 gap-4" x-show="form.jenis_kegiatan === 'KBM'">
+                                        {{-- Pilih Kelas --}}
+                                        <div>
+                                            <label class="block text-sm font-bold text-gray-700 mb-2">Pilih Kelas</label>
+                                            <select x-model="form.kelas_id" @change="loadGuruMapels()" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
+                                                <option value="">-- Pilih Kelas --</option>
+                                                @foreach($kelas as $k)
+                                                    <option value="{{ $k->id }}">Kelas {{ $k->level }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        {{-- Pilih Mapel --}}
+                                        <div>
+                                            <label class="block text-sm font-bold text-gray-700 mb-2">Pilih Mapel</label>
+                                            <select x-model="form.mapel_id" @change="loadGuruMapels()" :disabled="!form.kelas_id" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm disabled:bg-gray-100">
+                                                <option value="">-- Pilih Mapel --</option>
+                                                @foreach($mapels as $m)
+                                                    <option value="{{ $m->id }}">{{ $m->nama_mapel }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        {{-- Pilih Guru (Auto dari GuruMapel) --}}
+                                        <div class="col-span-2">
+                                            <label class="block text-sm font-bold text-gray-700 mb-2">Pilih Guru</label>
+                                            <select x-model="form.guru_mapel_id" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
+                                                <option value="">-- Pilih Guru --</option>
+                                                <template x-for="gm in availableGuruMapels" :key="gm.id">
+                                                    <option :value="gm.id" x-text="gm.guru_profile ? (gm.guru_profile.nama + ' (' + gm.semester + ' - ' + gm.tahun_ajaran + ')') : 'Guru Tidak Ditemukan'"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {{-- FIELDS FOR NON-KBM --}}
+                                    <div class="col-span-2 grid grid-cols-2 gap-4" x-show="form.jenis_kegiatan !== 'KBM'">
+                                        <div class="col-span-2">
+                                            <label class="block text-sm font-bold text-gray-700 mb-2">Nama Kegiatan</label>
+                                            <input type="text" x-model="form.nama_kegiatan" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm" placeholder="Contoh: Upacara Bendera Senin">
+                                        </div>
+                                        <div class="col-span-2">
+                                            <label class="block text-sm font-bold text-gray-700 mb-2">Jenjang</label>
+                                            <select x-model="form.jenjang" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
+                                                <option value="SMP">SMP</option>
+                                                <option value="SMA">SMA</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     {{-- Hari --}}
                                     <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">4. Hari</label>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">Hari</label>
                                         <select x-model="form.hari" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
                                             <template x-for="hari in hariOptions" :key="hari">
                                                 <option :value="hari" x-text="hari"></option>
@@ -226,19 +279,19 @@
 
                                     {{-- Jam Ke --}}
                                     <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">5. Jam Ke</label>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">Jam Ke</label>
                                         <input type="number" x-model="form.jam_ke" min="1" max="12" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm" placeholder="1-12">
                                     </div>
 
                                     {{-- Jam Mulai --}}
                                     <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">6. Jam Mulai</label>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">Jam Mulai</label>
                                         <input type="time" x-model="form.jam_mulai" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
                                     </div>
 
                                     {{-- Jam Selesai --}}
                                     <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">7. Jam Selesai</label>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">Jam Selesai</label>
                                         <input type="time" x-model="form.jam_selesai" class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-2 text-sm">
                                     </div>
 
@@ -278,6 +331,9 @@ function jadwalPelajaranData() {
         editId: null,
         availableGuruMapels: [],
         form: {
+            jenis_kegiatan: 'KBM',
+            nama_kegiatan: '',
+            jenjang: 'SMP',
             guru_mapel_id: '',
             kelas_id: '',
             mapel_id: '',
@@ -295,11 +351,11 @@ function jadwalPelajaranData() {
             let list = this.jadwals[hari] || [];
             
             if (this.filterKelas) {
-                list = list.filter(j => j.kelas.level == this.filterKelas);
+                list = list.filter(j => j.kelas && j.kelas.level == this.filterKelas);
             }
             
             if (this.filterMapel) {
-                list = list.filter(j => j.mapel.nama_mapel == this.filterMapel);
+                list = list.filter(j => j.mapel && j.mapel.nama_mapel == this.filterMapel);
             }
             
             return list;
@@ -317,6 +373,9 @@ function jadwalPelajaranData() {
 
         resetForm() {
             this.form = {
+                jenis_kegiatan: 'KBM',
+                nama_kegiatan: '',
+                jenjang: 'SMP',
                 guru_mapel_id: '',
                 kelas_id: '',
                 mapel_id: '',
@@ -383,6 +442,9 @@ function jadwalPelajaranData() {
             this.isEditMode = true;
             this.editId = jadwal.id;
             this.form = {
+                jenis_kegiatan: jadwal.jenis_kegiatan || 'KBM',
+                nama_kegiatan: jadwal.nama_kegiatan || '',
+                jenjang: jadwal.jenjang || 'SMP',
                 guru_mapel_id: jadwal.guru_mapel_id,
                 kelas_id: jadwal.kelas_id,
                 mapel_id: jadwal.mapel_id,
@@ -392,7 +454,9 @@ function jadwalPelajaranData() {
                 jam_selesai: jadwal.jam_selesai,
             };
             this.showModal = true;
-            this.loadGuruMapels();
+            if (this.form.jenis_kegiatan === 'KBM') {
+                this.loadGuruMapels();
+            }
         },
 
         async deleteJadwal(id) {

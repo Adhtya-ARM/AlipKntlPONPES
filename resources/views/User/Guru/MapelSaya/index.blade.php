@@ -11,11 +11,13 @@
             <h1 class="text-3xl font-bold text-gray-800">Kelas Saya</h1>
             <p class="text-gray-500 mt-1">Kelola kelas dan mata pelajaran yang Anda ampu.</p>
         </div>
-        <button @click="openModal()" 
-            class="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2 transform hover:scale-105 duration-200">
-            <i class="fas fa-plus-circle text-lg"></i> 
-            <span class="font-semibold">Tambah Mapel Ajar</span>
-        </button>
+        <div class="flex gap-3">
+            <button @click="openModal()" 
+                class="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition flex items-center gap-2 transform hover:scale-105 duration-200">
+                <i class="fas fa-plus-circle text-lg"></i> 
+                <span class="font-semibold">Tambah Mapel Ajar</span>
+            </button>
+        </div>
     </div>
 
     {{-- EMPTY STATE --}}
@@ -119,10 +121,16 @@
                            class="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl hover:from-blue-600 hover:to-blue-700 transition font-medium shadow-md">
                             <i class="fas fa-chart-pie"></i> Rekap Lengkap
                         </a>
-                        <button @click="clearGrades(gm.id)" 
-                            class="flex items-center justify-center gap-2 border-2 border-red-200 text-red-600 py-2.5 rounded-xl hover:bg-red-50 hover:border-red-300 transition text-sm font-medium">
-                            <i class="fas fa-eraser"></i> Reset Semua Nilai
-                        </button>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button @click="resetAbsensi(gm.id)" 
+                                class="flex items-center justify-center gap-2 border border-orange-200 text-orange-600 py-2.5 rounded-xl hover:bg-orange-50 hover:border-orange-300 transition text-sm font-medium">
+                                <i class="fas fa-history"></i> Reset Absen
+                            </button>
+                            <button @click="clearGrades(gm.id)" 
+                                class="flex items-center justify-center gap-2 border border-red-200 text-red-600 py-2.5 rounded-xl hover:bg-red-50 hover:border-red-300 transition text-sm font-medium">
+                                <i class="fas fa-eraser"></i> Reset Nilai
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -188,23 +196,19 @@
                                         <p x-show="form.kelas_id && filteredMapels.length === 0" class="text-xs text-red-500 mt-1">* Semua mapel untuk kelas ini sudah Anda ambil.</p>
                                     </div>
 
-                                    <div class="grid grid-cols-2 gap-4">
-                                        {{-- Semester --}}
-                                        <div>
-                                            <label class="block text-sm font-bold text-gray-700 mb-2">3. Semester</label>
-                                            <select x-model="form.semester" 
-                                                class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-3 text-base">
-                                                <option value="ganjil">Ganjil</option>
-                                                <option value="genap">Genap</option>
-                                            </select>
+                                    {{-- Auto-filled Info from Active Year --}}
+                                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <i class="fas fa-info-circle text-blue-600"></i>
+                                            <span class="text-sm font-semibold text-gray-700">Tahun Ajaran Aktif</span>
                                         </div>
-
-                                        {{-- Tahun Ajaran --}}
-                                        <div>
-                                            <label class="block text-sm font-bold text-gray-700 mb-2">4. Tahun Ajaran</label>
-                                            <input type="text" 
-                                                x-model="form.tahun_ajaran" 
-                                                class="w-full border-gray-300 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 py-3 text-base text-center font-medium">
+                                        <div class="space-y-1">
+                                            <div class="text-base font-bold text-blue-700" x-text="activeYearDisplay"></div>
+                                            <div class="flex items-center gap-3">
+                                                <div class="text-sm text-blue-600" x-text="'Semester ' + (form.semester == 'ganjil' ? 'Ganjil' : 'Genap')"></div>
+                                                <span class="text-blue-400">•</span>
+                                                <div class="text-sm text-blue-600" x-show="activeYearJenjang" x-text="'Jenjang: ' + activeYearJenjang"></div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -232,20 +236,25 @@
 
 <script>
 function guruMapelData() {
-    return{
+    const activeYear = @json(\App\Models\Akademik\TahunAjaran::active()->first());
+    
+    return {
         guruMapels: @json($guruMapels),
         mapels: @json($mapels),
         kelas: @json($kelas),
         filteredMapels: [],
         showModal: false,
+        activeYearDisplay: activeYear ? activeYear.nama : 'Tidak Ada',
+        activeYearJenjang: activeYear ? activeYear.jenjang : null,
         form: {
             kelas_id: '',
             mapel_id: '',
-            semester: 'ganjil',
-            tahun_ajaran: '2025/2026'
+            semester: activeYear ? activeYear.semester : 'ganjil',
+            tahun_ajaran: activeYear ? activeYear.nama : ''
         },
 
         init() {
+            console.log('Active Year:', activeYear);
             console.log('Guru Mapels with Stats:', this.guruMapels);
         },
 
@@ -269,8 +278,24 @@ function guruMapelData() {
                 .filter(gm => gm.kelas_id == this.form.kelas_id)
                 .map(gm => gm.mapel_id);
 
-            // Filter mapel: tampilkan hanya yang BELUM diambil untuk kelas ini
-            this.filteredMapels = this.mapels.filter(m => !takenMapelIds.includes(m.id));
+            // Find selected class level
+            const selectedKelas = this.kelas.find(k => k.id == this.form.kelas_id);
+            const level = selectedKelas ? selectedKelas.level : null;
+
+            // Filter mapel: tampilkan hanya yang BELUM diambil untuk kelas ini DAN sesuai tingkat
+            this.filteredMapels = this.mapels.filter(m => {
+                // 1. Check if already taken
+                if (takenMapelIds.includes(m.id)) return false;
+                
+                // 2. Check if mapel targets this level
+                if (level && m.tingkat && Array.isArray(m.tingkat) && m.tingkat.length > 0) {
+                    return m.tingkat.map(t => t.toString()).includes(level.toString());
+                }
+                
+                // If mapel has no specific level (empty array or null), show it (optional, depends on business rule)
+                // Assuming if no level specified, it's available for all or none. Let's assume available.
+                return true;
+            });
             
             // Reset mapel selection if currently selected mapel is not available
             if (this.form.mapel_id && !this.filteredMapels.find(m => m.id == this.form.mapel_id)) {
@@ -376,6 +401,43 @@ function guruMapelData() {
                     });
                 } else {
                     Swal.fire('Gagal', data.message || 'Gagal menghapus penilaian', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire('Error', 'Terjadi kesalahan: ' + error.message, 'error');
+            }
+        },
+
+        async resetAbsensi(id) {
+            const result = await Swal.fire({
+                title: 'Reset Kehadiran?',
+                text: "Semua data kehadiran untuk kelas ini akan dihapus. Lanjutkan?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#f97316',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Reset Absen!',
+                cancelButtonText: 'Batal'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch(`{{ url('akademik/guru-mapel') }}/${id}/reset-absensi`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    Swal.fire('Berhasil', data.message, 'success').then(() => {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Gagal', data.message || 'Gagal mereset absensi', 'error');
                 }
             } catch (error) {
                 console.error('Error:', error);
